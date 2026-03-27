@@ -1,0 +1,139 @@
+{% comment %}
+  SC Checkout Redirect Script
+  Include this in sections/main-cart.liquid with: {% render 'sc-checkout-redirect' %}
+  Place it just before the closing </section> tag.
+
+  This script intercepts the checkout buttons and redirects to the custom checkout
+  at checkout.thesveltechic.com with cart data, Meta cookies, and UTM parameters.
+{% endcomment %}
+
+<script>
+(function() {
+  'use strict';
+
+  var CHECKOUT_URL = 'https://checkout.thesveltechic.com';
+
+  // ---- Cookie helper ----
+  function getCookie(name) {
+    var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    return match ? decodeURIComponent(match[2]) : '';
+  }
+
+  // ---- Get UTM params from URL or sessionStorage ----
+  function getUTMs() {
+    var params = new URLSearchParams(window.location.search);
+    var keys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+    var utms = {};
+
+    keys.forEach(function(key) {
+      var val = params.get(key);
+      if (val) {
+        utms[key] = val;
+        // Store in sessionStorage for persistence across pages
+        try { sessionStorage.setItem('sc_' + key, val); } catch(e) {}
+      } else {
+        // Try sessionStorage fallback
+        try { utms[key] = sessionStorage.getItem('sc_' + key) || ''; } catch(e) { utms[key] = ''; }
+      }
+    });
+
+    return utms;
+  }
+
+  // Store UTMs on page load (so they persist from landing page to cart)
+  getUTMs();
+
+  // ---- Redirect to custom checkout ----
+  function redirectToCheckout() {
+    // Fetch full cart data from Shopify AJAX API
+    fetch('/cart.js')
+      .then(function(r) { return r.json(); })
+      .then(function(cart) {
+        if (!cart.items || cart.items.length === 0) {
+          alert('Sepetiniz boş.');
+          return;
+        }
+
+        // Build compact cart data for URL
+        var cartData = cart.items.map(function(item) {
+          return {
+            title: item.title,
+            variant_title: item.variant_title,
+            variant_id: item.variant_id,
+            product_id: item.product_id,
+            sku: item.sku,
+            quantity: item.quantity,
+            price: item.original_price,
+            line_price: item.original_line_price,
+            final_price: item.final_price,
+            final_line_price: item.final_line_price,
+            image: item.image ? item.image.replace(/(\.[^.]+)$/, '_180x$1') : ''
+          };
+        });
+
+        // Encode cart data as base64
+        var cartBase64 = btoa(JSON.stringify(cartData));
+
+        // Build redirect URL
+        var redirectParams = new URLSearchParams();
+        redirectParams.set('cart', encodeURIComponent(cartBase64));
+
+        // Meta cookies
+        var fbp = getCookie('_fbp');
+        var fbc = getCookie('_fbc');
+        if (fbp) redirectParams.set('fbp', fbp);
+        if (fbc) redirectParams.set('fbc', fbc);
+
+        // UTM params
+        var utms = getUTMs();
+        Object.keys(utms).forEach(function(key) {
+          if (utms[key]) redirectParams.set(key, utms[key]);
+        });
+
+        // Redirect
+        window.location.href = CHECKOUT_URL + '/?' + redirectParams.toString();
+      })
+      .catch(function(err) {
+        console.error('Checkout redirect error:', err);
+        // Fallback to native Shopify checkout
+        window.location.href = '/checkout';
+      });
+  }
+
+  // ---- Intercept checkout buttons ----
+  document.addEventListener('DOMContentLoaded', function() {
+    // Intercept the main checkout form submission
+    var forms = document.querySelectorAll('form[action="/cart"]');
+    forms.forEach(function(form) {
+      form.addEventListener('submit', function(e) {
+        // Check if the submit was from a checkout button
+        var submitter = e.submitter;
+        if (submitter && submitter.name === 'checkout') {
+          e.preventDefault();
+          redirectToCheckout();
+        }
+      });
+    });
+
+    // Intercept checkout buttons directly
+    var checkoutBtns = document.querySelectorAll('[name="checkout"], .sc-checkout-btn, .sc-sticky-checkout');
+    checkoutBtns.forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        redirectToCheckout();
+      });
+    });
+
+    // Also intercept the mobile sticky bar ÖDEME button
+    var stickyCheckout = document.querySelector('.sc-sticky-checkout');
+    if (stickyCheckout) {
+      stickyCheckout.type = 'button'; // Prevent form submission
+      stickyCheckout.addEventListener('click', function(e) {
+        e.preventDefault();
+        redirectToCheckout();
+      });
+    }
+  });
+})();
+</script>

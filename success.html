@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sipariş Onayı – Svelte Chic</title>
+  <link rel="stylesheet" href="/css/checkout.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    .sc-success-wrap {
+      max-width: 580px;
+      margin: 0 auto;
+      padding: 60px 24px;
+      text-align: center;
+    }
+    .sc-success-icon {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #c9b88c, #a08a60);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+    }
+    .sc-success-icon svg {
+      width: 36px;
+      height: 36px;
+      stroke: #fff;
+      fill: none;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .sc-success-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #222;
+      margin-bottom: 8px;
+      letter-spacing: 0.5px;
+    }
+    .sc-success-subtitle {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 32px;
+      line-height: 1.6;
+    }
+    .sc-success-details {
+      background: #fafaf8;
+      border: 1px solid #ebebeb;
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 32px;
+      text-align: left;
+    }
+    .sc-success-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      font-size: 14px;
+    }
+    .sc-success-row span:first-child {
+      color: #666;
+    }
+    .sc-success-row span:last-child {
+      font-weight: 600;
+      color: #222;
+    }
+    .sc-success-row + .sc-success-row {
+      border-top: 1px solid #ebebeb;
+    }
+    .sc-success-btn {
+      display: inline-block;
+      padding: 14px 36px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      letter-spacing: 0.5px;
+      color: #fff;
+      background: #b5a07c;
+      border: none;
+      border-radius: 6px;
+      text-decoration: none;
+      transition: background 0.2s;
+    }
+    .sc-success-btn:hover {
+      background: #9a8968;
+    }
+    .sc-success-note {
+      margin-top: 24px;
+      font-size: 12px;
+      color: #999;
+    }
+  </style>
+</head>
+<body>
+  <header class="sc-header">
+    <div class="sc-header-inner">
+      <a href="https://www.thesveltechic.com" class="sc-logo">SVELTE CHIC</a>
+    </div>
+  </header>
+
+  <div class="sc-success-wrap">
+    <div class="sc-success-icon">
+      <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+    <h1 class="sc-success-title">Siparişiniz Alındı!</h1>
+    <p class="sc-success-subtitle">
+      Teşekkür ederiz. Siparişiniz başarıyla oluşturuldu.<br>
+      Sipariş detayları e-posta adresinize gönderilecektir.
+    </p>
+
+    <div class="sc-success-details">
+      <div class="sc-success-row">
+        <span>Sipariş Numarası</span>
+        <span id="orderNumber">—</span>
+      </div>
+      <div class="sc-success-row">
+        <span>E-posta</span>
+        <span id="orderEmail">—</span>
+      </div>
+      <div class="sc-success-row">
+        <span>Toplam</span>
+        <span id="orderTotal">—</span>
+      </div>
+    </div>
+
+    <a href="https://www.thesveltechic.com" class="sc-success-btn">Alışverişe Devam Et</a>
+
+    <p class="sc-success-note">
+      Sorularınız için <a href="mailto:info@thesveltechic.com" style="color:#b5a07c;">info@thesveltechic.com</a> adresinden bize ulaşabilirsiniz.
+    </p>
+  </div>
+
+  <script>
+    (function() {
+      const p = new URLSearchParams(window.location.search);
+      document.getElementById('orderNumber').textContent = p.get('order') || '—';
+      document.getElementById('orderEmail').textContent = p.get('email') || '—';
+      document.getElementById('orderTotal').textContent = p.get('total') || '—';
+    })();
+  </script>
+</body>
+</html>

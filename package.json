@@ -1,0 +1,10 @@
+{
+  "name": "sveltechic-checkout",
+  "version": "1.0.0",
+  "description": "Svelte Chic custom checkout with Stripe + Shopify + Meta CAPI",
+  "private": true,
+  "dependencies": {
+    "stripe": "^14.0.0",
+    "node-fetch": "^2.7.0"
+  }
+}
