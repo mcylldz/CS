@@ -13,7 +13,15 @@
   <!-- Header -->
   <header class="sc-header">
     <div class="sc-header-inner">
-      <a href="https://www.thesveltechic.com" class="sc-logo">SVELTE CHIC</a>
+      <a href="https://www.thesveltechic.com" class="sc-logo">
+        <svg viewBox="0 0 340 32" xmlns="http://www.w3.org/2000/svg" class="sc-logo-svg">
+          <text x="0" y="26" font-family="'Times New Roman',Georgia,serif" font-size="30" font-weight="700" letter-spacing="5" fill="#222">SV</text>
+          <text x="52" y="26" font-family="'Times New Roman',Georgia,serif" font-size="30" font-weight="700" letter-spacing="5" fill="#222">Ξ</text>
+          <text x="73" y="26" font-family="'Times New Roman',Georgia,serif" font-size="30" font-weight="700" letter-spacing="5" fill="#222">LT</text>
+          <text x="116" y="26" font-family="'Times New Roman',Georgia,serif" font-size="30" font-weight="700" letter-spacing="5" fill="#222">Ξ</text>
+          <text x="145" y="26" font-family="'Times New Roman',Georgia,serif" font-size="30" font-weight="700" letter-spacing="5" fill="#222"> CHIC</text>
+        </svg>
+      </a>
       <div class="sc-header-secure">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
         Güvenli Ödeme
@@ -122,6 +130,22 @@
           </div>
         </section>
 
+        <!-- Legal Agreements -->
+        <section class="sc-section sc-legal-section">
+          <div class="sc-legal-check">
+            <input type="checkbox" id="agreementCheck" class="sc-checkbox" required>
+            <label for="agreementCheck" class="sc-checkbox-label">
+              <a href="#" id="openAgreement" class="sc-legal-link">Mesafeli Satış Sözleşmesi</a>'ni okudum ve kabul ediyorum. <span class="sc-required">*</span>
+            </label>
+          </div>
+          <div class="sc-legal-check">
+            <input type="checkbox" id="marketingCheck" class="sc-checkbox">
+            <label for="marketingCheck" class="sc-checkbox-label">
+              <a href="#" id="openMarketing" class="sc-legal-link">Ticari Elektronik İleti</a> almak istiyorum. (Opsiyonel)
+            </label>
+          </div>
+        </section>
+
         <!-- Submit -->
         <button type="button" id="submitBtn" class="sc-submit-btn" disabled>
           <span id="btnText">Siparişi Tamamla</span>
@@ -196,6 +220,38 @@
       </div>
     </div>
   </main>
+
+  <!-- Agreement Modal -->
+  <div class="sc-legal-overlay" id="agreementOverlay">
+    <div class="sc-legal-modal">
+      <div class="sc-legal-modal-header">
+        <h3>Mesafeli Satış Sözleşmesi</h3>
+        <button class="sc-legal-close" onclick="document.getElementById('agreementOverlay').classList.remove('sc-open')">&times;</button>
+      </div>
+      <div class="sc-legal-modal-body" id="agreementBody">
+        <!-- Filled dynamically by JS -->
+      </div>
+      <div class="sc-legal-modal-footer">
+        <button class="sc-legal-accept-btn" onclick="document.getElementById('agreementCheck').checked=true;document.getElementById('agreementOverlay').classList.remove('sc-open');">Okudum, Kabul Ediyorum</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Marketing Modal -->
+  <div class="sc-legal-overlay" id="marketingOverlay">
+    <div class="sc-legal-modal">
+      <div class="sc-legal-modal-header">
+        <h3>Ticari Elektronik İleti Onayı</h3>
+        <button class="sc-legal-close" onclick="document.getElementById('marketingOverlay').classList.remove('sc-open')">&times;</button>
+      </div>
+      <div class="sc-legal-modal-body" id="marketingBody">
+        <!-- Filled dynamically by JS -->
+      </div>
+      <div class="sc-legal-modal-footer">
+        <button class="sc-legal-accept-btn" onclick="document.getElementById('marketingCheck').checked=true;document.getElementById('marketingOverlay').classList.remove('sc-open');">Onaylıyorum</button>
+      </div>
+    </div>
+  </div>
 
   <script src="/js/checkout.js"></script>
 </body>

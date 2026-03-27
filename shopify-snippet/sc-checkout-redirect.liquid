@@ -71,8 +71,8 @@
           };
         });
 
-        // Encode cart data as base64
-        var cartBase64 = btoa(JSON.stringify(cartData));
+        // Encode cart data as base64 (handle Unicode/Turkish chars)
+        var cartBase64 = btoa(unescape(encodeURIComponent(JSON.stringify(cartData))));
 
         // Build redirect URL
         var redirectParams = new URLSearchParams();
@@ -101,7 +101,7 @@
   }
 
   // ---- Intercept checkout buttons ----
-  document.addEventListener('DOMContentLoaded', function() {
+  function initCheckoutRedirect() {
     // Intercept the main checkout form submission
     var forms = document.querySelectorAll('form[action="/cart"]');
     forms.forEach(function(form) {
@@ -110,6 +110,7 @@
         var submitter = e.submitter;
         if (submitter && submitter.name === 'checkout') {
           e.preventDefault();
+          e.stopImmediatePropagation();
           redirectToCheckout();
         }
       });
@@ -118,22 +119,21 @@
     // Intercept checkout buttons directly
     var checkoutBtns = document.querySelectorAll('[name="checkout"], .sc-checkout-btn, .sc-sticky-checkout');
     checkoutBtns.forEach(function(btn) {
+      // Change submit buttons to regular buttons to prevent form submission
+      if (btn.type === 'submit') btn.type = 'button';
       btn.addEventListener('click', function(e) {
         e.preventDefault();
-        e.stopPropagation();
+        e.stopImmediatePropagation();
         redirectToCheckout();
       });
     });
+  }
 
-    // Also intercept the mobile sticky bar ÖDEME button
-    var stickyCheckout = document.querySelector('.sc-sticky-checkout');
-    if (stickyCheckout) {
-      stickyCheckout.type = 'button'; // Prevent form submission
-      stickyCheckout.addEventListener('click', function(e) {
-        e.preventDefault();
-        redirectToCheckout();
-      });
-    }
-  });
+  // Run immediately if DOM is already loaded, otherwise wait
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initCheckoutRedirect);
+  } else {
+    initCheckoutRedirect();
+  }
 })();
 </script>

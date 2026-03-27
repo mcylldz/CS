@@ -48,7 +48,8 @@ exports.handler = async (event) => {
       total,
       fbp, fbc,
       utm_source, utm_medium, utm_campaign, utm_term, utm_content,
-      userAgent, sourceUrl
+      userAgent, sourceUrl,
+      agreementHtml, marketingConsent
     } = body;
 
     // Get client IP from headers (Netlify provides this)
@@ -112,7 +113,7 @@ exports.handler = async (event) => {
             phone: customer.phone,
             default: true
           }],
-          tags: 'custom-checkout',
+          tags: marketingConsent ? 'custom-checkout, accepts-marketing' : 'custom-checkout',
           metafields: [{
             namespace: 'checkout',
             key: 'stripe_customer_id',
@@ -144,6 +145,7 @@ exports.handler = async (event) => {
     noteAttributes.push({ name: 'payment_gateway', value: 'stripe' });
     noteAttributes.push({ name: 'stripe_payment_intent', value: paymentIntentId });
     if (stripeCustomerId) noteAttributes.push({ name: 'stripe_customer_id', value: stripeCustomerId });
+    if (marketingConsent) noteAttributes.push({ name: 'marketing_consent', value: 'true' });
 
     const orderPayload = {
       order: {
@@ -155,7 +157,7 @@ exports.handler = async (event) => {
         fulfillment_status: null,
         send_receipt: true,
         send_fulfillment_receipt: true,
-        note: `Custom checkout | Stripe PI: ${paymentIntentId}`,
+        note: `Custom checkout | Stripe PI: ${paymentIntentId}\n\n--- MESAFELİ SATIŞ SÖZLEŞMESİ ---\nSözleşme elektronik ortamda onaylanmıştır. Detaylar sipariş notu olarak eklenmiştir.`,
         note_attributes: noteAttributes,
         tags: 'custom-checkout, stripe',
         shipping_address: {
@@ -207,6 +209,22 @@ exports.handler = async (event) => {
     const shopifyOrder = orderResp.order;
 
     console.log(`Shopify order created: ${shopifyOrder.name} (ID: ${shopifyOrder.id})`);
+
+    // Save agreement as order metafield
+    if (agreementHtml) {
+      try {
+        await shopifyRequest(`orders/${shopifyOrder.id}/metafields.json`, 'POST', {
+          metafield: {
+            namespace: 'checkout',
+            key: 'mesafeli_satis_sozlesmesi',
+            value: agreementHtml,
+            type: 'multi_line_text_field'
+          }
+        });
+      } catch (mfErr) {
+        console.warn('Agreement metafield save warning:', mfErr.message);
+      }
+    }
 
     // =============================================
     // STEP 3: Meta Conversions API — Purchase Event

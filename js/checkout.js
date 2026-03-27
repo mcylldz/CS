@@ -44,7 +44,7 @@
     }
     try {
       const decoded = decodeURIComponent(cartParam);
-      const json = atob(decoded);
+      const json = decodeURIComponent(escape(atob(decoded)));
       const data = JSON.parse(json);
       if (Array.isArray(data) && data.length > 0) {
         cartItems = data;
@@ -184,6 +184,25 @@
         validateField(this);
       });
     });
+
+    // Legal agreement links
+    document.getElementById('openAgreement').addEventListener('click', function(e) {
+      e.preventDefault();
+      document.getElementById('agreementBody').innerHTML = generateAgreementHtml();
+      document.getElementById('agreementOverlay').classList.add('sc-open');
+    });
+    document.getElementById('openMarketing').addEventListener('click', function(e) {
+      e.preventDefault();
+      document.getElementById('marketingBody').innerHTML = generateMarketingHtml();
+      document.getElementById('marketingOverlay').classList.add('sc-open');
+    });
+
+    // Close modals on overlay click
+    ['agreementOverlay', 'marketingOverlay'].forEach(function(id) {
+      document.getElementById(id).addEventListener('click', function(e) {
+        if (e.target === this) this.classList.remove('sc-open');
+      });
+    });
   }
 
   // ---- Coupon Validation ----
@@ -261,6 +280,10 @@
   // ---- Handle Submit ----
   async function handleSubmit() {
     if (isProcessing) return;
+    if (!document.getElementById('agreementCheck').checked) {
+      showGlobalError('Mesafeli Satış Sözleşmesi\'ni onaylamanız gerekmektedir.');
+      return;
+    }
     if (!validateAllFields()) {
       showGlobalError('Lütfen tüm zorunlu alanları doldurun.');
       return;
@@ -359,7 +382,9 @@
             utm_term: utmTerm,
             utm_content: utmContent,
             userAgent: navigator.userAgent,
-            sourceUrl: window.location.href
+            sourceUrl: window.location.href,
+            agreementHtml: generateAgreementHtml(),
+            marketingConsent: document.getElementById('marketingCheck').checked
           })
         });
         const orderData = await orderResp.json();
@@ -425,6 +450,89 @@
 
   function hideGlobalError() {
     document.getElementById('globalError').style.display = 'none';
+  }
+
+  // ---- Agreement Text Generators ----
+  function generateAgreementHtml() {
+    var ci = {
+      firstName: val('firstName') || '___',
+      lastName: val('lastName') || '___',
+      email: val('email') || '___',
+      phone: val('phone') || '___',
+      address: val('address') || '___',
+      apartment: val('apartment') || '',
+      city: val('city') || '___',
+      district: val('district') || '___',
+      zip: val('zip') || '___'
+    };
+    var fullAddress = ci.address + (ci.apartment ? ', ' + ci.apartment : '') + ', ' + ci.district + ', ' + ci.city + ' ' + ci.zip;
+    var today = new Date();
+    var dateStr = today.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    var itemsHtml = cartItems.map(function(item) {
+      return '<tr><td>' + escapeHtml(item.title) + '</td><td>' + (item.variant_title || '-') + '</td><td>' + item.quantity + '</td><td>' + formatMoney(item.line_price) + '</td></tr>';
+    }).join('');
+
+    var total = subtotal - discountAmount;
+
+    return '<h4>MADDE 1 — TARAFLAR</h4>' +
+      '<p><strong>SATICI:</strong></p>' +
+      '<table><tr><td>Ticaret Unvanı</td><td>MESU L.L.C-F.Z</td></tr>' +
+      '<tr><td>Marka Adı</td><td>Svelte Chic</td></tr>' +
+      '<tr><td>Adres</td><td>Meydan Grandstand, 6th Floor, Meydan Road, Nad Al Sheba, Dubai, BAE</td></tr>' +
+      '<tr><td>Telefon</td><td>+971 56 850 8810</td></tr>' +
+      '<tr><td>E-posta</td><td>destek@thesveltechic.com</td></tr>' +
+      '<tr><td>Web Sitesi</td><td>www.thesveltechic.com</td></tr></table>' +
+      '<p><strong>ALICI:</strong></p>' +
+      '<table><tr><td>Ad Soyad</td><td>' + escapeHtml(ci.firstName + ' ' + ci.lastName) + '</td></tr>' +
+      '<tr><td>E-posta</td><td>' + escapeHtml(ci.email) + '</td></tr>' +
+      '<tr><td>Telefon</td><td>' + escapeHtml(ci.phone) + '</td></tr>' +
+      '<tr><td>Teslimat Adresi</td><td>' + escapeHtml(fullAddress) + '</td></tr></table>' +
+      '<h4>MADDE 2 — SÖZLEŞMENİN KONUSU</h4>' +
+      '<p>İşbu Mesafeli Satış Sözleşmesi, SATICI\'nın www.thesveltechic.com internet sitesi üzerinden elektronik ortamda ALICI\'ya satışını yaptığı aşağıda nitelikleri ve satış fiyatı belirtilen ürün/ürünlerin satışı ve teslimi ile ilgili olarak 6502 sayılı Tüketicinin Korunması Hakkında Kanun ve Mesafele Sözleşmeler Yönetmeliği hükümleri gereğince tarafların hak ve yükümlülüklerini düzenler.</p>' +
+      '<h4>MADDE 3 — SÖZLEŞME KONUSU ÜRÜN BİLGİLERİ</h4>' +
+      '<table><tr><td><strong>Ürün</strong></td><td><strong>Varyant</strong></td><td><strong>Adet</strong></td><td><strong>Tutar</strong></td></tr>' + itemsHtml + '</table>' +
+      '<table><tr><td>Ara Toplam</td><td>' + formatMoney(subtotal) + '</td></tr>' +
+      (discountAmount > 0 ? '<tr><td>İndirim' + (appliedCoupon ? ' (' + appliedCoupon + ')' : '') + '</td><td>-' + formatMoney(discountAmount) + '</td></tr>' : '') +
+      '<tr><td>Kargo</td><td>Ücretsiz</td></tr>' +
+      '<tr><td><strong>Toplam</strong></td><td><strong>' + formatMoney(total) + '</strong></td></tr></table>' +
+      '<h4>MADDE 4 — GENEL HÜKÜMLER</h4>' +
+      '<p>4.1. ALICI, SATICI\'ya ait www.thesveltechic.com internet sitesinde sözleşme konusu ürünün temel nitelikleri, satış fiyatı ve ödeme şekli ile teslimata ilişkin ön bilgileri okuyup bilgi sahibi olduğunu ve elektronik ortamda gerekli onayı verdiğini kabul, beyan ve taahhüt eder.</p>' +
+      '<p>4.2. Sözleşme konusu her bir ürün, yasal 30 günlük süreyi aşmamak koşulu ile ALICI\'nın yerleşim yeri uzaklığına bağlı olarak internet sitesindeki ön bilgiler kısmında belirtilen süre zarfında ALICI veya ALICI\'nın gösterdiği adresteki kişi ve/veya kuruluşa teslim edilir.</p>' +
+      '<p>4.3. Sözleşme konusu ürün, ALICI\'dan başka bir kişi/kuruluşa teslim edilecek ise, teslim edilecek kişi/kuruluşun teslimatı kabul etmemesinden SATICI sorumlu tutulamaz.</p>' +
+      '<h4>MADDE 5 — ÖDEME VE TESLİMAT</h4>' +
+      '<p>5.1. Ödeme, ALICI tarafından kredi kartı/banka kartı ile gerçekleştirilir. Ödeme işlemi güvenli ödeme altyapısı (Stripe) üzerinden şifrelenerek yapılır.</p>' +
+      '<p>5.2. Kargo ücreti SATICI tarafından karşılanır (Ücretsiz Kargo).</p>' +
+      '<p>5.3. Teslimat, kargoya verildiği tarihten itibaren ortalama 3-7 iş günü içerisinde yapılır.</p>' +
+      '<h4>MADDE 6 — CAYMA HAKKI</h4>' +
+      '<p>6.1. ALICI, sözleşme konusu ürünün kendisine veya gösterdiği adresteki kişi/kuruluşa tesliminden itibaren 14 (on dört) gün içerisinde cayma hakkını kullanabilir.</p>' +
+      '<p>6.2. Cayma hakkının kullanılması için bu süre içinde SATICI\'ya destek@thesveltechic.com adresinden e-posta ile veya +971 56 850 8810 numaralı telefonla bildirimde bulunulması ve ürünün kullanılmamış olması şarttır.</p>' +
+      '<p>6.3. Cayma hakkı kapsamında iade edilen ürünlerin kargo bedeli ALICI tarafından karşılanır.</p>' +
+      '<h4>MADDE 7 — UYUŞMAZLIK ÇÖZÜMÜ</h4>' +
+      '<p>İşbu sözleşmeden doğan uyuşmazlıklarda Dubai mahkemeleri ve icra daireleri yetkilidir.</p>' +
+      '<h4>MADDE 8 — YÜRÜRLÜK</h4>' +
+      '<p>ALICI, işbu sözleşmeyi elektronik ortamda onaylayarak tüm şartları kabul etmiş sayılır. Sözleşme, onay tarihinde yürürlüğe girer.</p>' +
+      '<p><strong>Sözleşme Tarihi:</strong> ' + dateStr + '</p>' +
+      '<p><strong>ALICI:</strong> ' + escapeHtml(ci.firstName + ' ' + ci.lastName) + '</p>';
+  }
+
+  function generateMarketingHtml() {
+    var ci = {
+      firstName: val('firstName') || '___',
+      lastName: val('lastName') || '___',
+      email: val('email') || '___',
+      phone: val('phone') || '___'
+    };
+    var today = new Date();
+    var dateStr = today.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    return '<h4>TİCARİ ELEKTRONİK İLETİ ONAYI</h4>' +
+      '<p>6563 sayılı Elektronik Ticaretin Düzenlenmesi Hakkında Kanun ve ilgili mevzuat kapsamında;</p>' +
+      '<p><strong>' + escapeHtml(ci.firstName + ' ' + ci.lastName) + '</strong> olarak, <strong>MESU L.L.C-F.Z (Svelte Chic)</strong> tarafından aşağıda belirtilen iletişim kanalları aracılığıyla tarafıma ticari elektronik ileti (kampanya, promosyon, indirim, yeni ürün bildirimi vb.) gönderilmesini kabul ediyorum.</p>' +
+      '<table><tr><td>E-posta</td><td>' + escapeHtml(ci.email) + '</td></tr>' +
+      '<tr><td>Telefon / SMS</td><td>' + escapeHtml(ci.phone) + '</td></tr></table>' +
+      '<p>Bu onayımı istediğim zaman destek@thesveltechic.com adresine e-posta göndererek veya gelen iletilerdeki "abonelikten çık" bağlantısını kullanarak geri çekebileceğimi biliyorum.</p>' +
+      '<p><strong>Onay Tarihi:</strong> ' + dateStr + '</p>';
   }
 
 })();
