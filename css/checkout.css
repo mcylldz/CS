@@ -40,22 +40,16 @@ body {
   padding: 16px 24px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
 }
 .sc-logo {
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: 3px;
-  color: var(--dark);
+  display: inline-block;
   text-decoration: none;
 }
-.sc-header-secure {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-muted);
-  letter-spacing: 0.3px;
+.sc-logo-img {
+  height: 28px;
+  width: auto;
+  display: block;
 }
 
 /* ---- Main Layout ---- */
@@ -99,9 +93,52 @@ body {
   font-size: 13px;
   color: var(--text-muted);
 }
+.sc-step {
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.sc-step:hover {
+  color: var(--text-light);
+}
 .sc-step-active {
   color: var(--gold);
   font-weight: 600;
+}
+.sc-step-completed {
+  color: var(--gold);
+  font-weight: 500;
+}
+
+/* ---- Step Panels ---- */
+.sc-step-panel {
+  display: none;
+}
+.sc-step-panel-active {
+  display: block;
+  animation: scFadeIn 0.3s ease;
+}
+@keyframes scFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---- Back Button ---- */
+.sc-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  margin-bottom: 24px;
+  font-size: 13px;
+  font-family: var(--font);
+  color: var(--gold);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.sc-back-btn:hover {
+  color: var(--gold-dark);
 }
 
 /* ---- Sections ---- */
@@ -230,7 +267,14 @@ body {
   gap: 6px;
   align-items: center;
 }
-.sc-card-icons img { height: 22px; }
+.sc-visa-icon {
+  height: 22px;
+  width: auto;
+}
+.sc-mc-icon {
+  height: 22px;
+  width: auto;
+}
 .sc-stripe-element {
   padding: 16px;
   min-height: 52px;
@@ -554,12 +598,6 @@ body {
     font-size: 14px;
     padding: 14px;
   }
-}
-
-/* ===== LOGO SVG ===== */
-.sc-logo-svg {
-  height: 26px;
-  width: auto;
 }
 
 /* ===== LEGAL SECTION ===== */

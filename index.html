@@ -14,18 +14,8 @@
   <header class="sc-header">
     <div class="sc-header-inner">
       <a href="https://www.thesveltechic.com" class="sc-logo">
-        <svg viewBox="0 0 340 32" xmlns="http://www.w3.org/2000/svg" class="sc-logo-svg">
-          <text x="0" y="26" font-family="'Times New Roman',Georgia,serif" font-size="30" font-weight="700" letter-spacing="5" fill="#222">SV</text>
-          <text x="52" y="26" font-family="'Times New Roman',Georgia,serif" font-size="30" font-weight="700" letter-spacing="5" fill="#222">Ξ</text>
-          <text x="73" y="26" font-family="'Times New Roman',Georgia,serif" font-size="30" font-weight="700" letter-spacing="5" fill="#222">LT</text>
-          <text x="116" y="26" font-family="'Times New Roman',Georgia,serif" font-size="30" font-weight="700" letter-spacing="5" fill="#222">Ξ</text>
-          <text x="145" y="26" font-family="'Times New Roman',Georgia,serif" font-size="30" font-weight="700" letter-spacing="5" fill="#222"> CHIC</text>
-        </svg>
+        <img src="/slogo.png" alt="Svelte Chic" class="sc-logo-img">
       </a>
-      <div class="sc-header-secure">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        Güvenli Ödeme
-      </div>
     </div>
   </header>
 
@@ -36,124 +26,141 @@
       <div class="sc-form-col">
         <!-- Breadcrumb steps -->
         <div class="sc-steps">
-          <span class="sc-step sc-step-active">Bilgiler</span>
+          <span class="sc-step sc-step-active" id="stepLabel1" data-step="1">Bilgiler</span>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-          <span class="sc-step">Ödeme</span>
+          <span class="sc-step" id="stepLabel2" data-step="2">Ödeme</span>
         </div>
 
-        <!-- Contact Section -->
-        <section class="sc-section">
-          <h2 class="sc-section-title">İletişim Bilgileri</h2>
-          <div class="sc-field">
-            <input type="email" id="email" class="sc-input" placeholder=" " required autocomplete="email">
-            <label for="email" class="sc-label">E-posta adresi</label>
-          </div>
-          <div class="sc-field">
-            <input type="tel" id="phone" class="sc-input" placeholder=" " required autocomplete="tel">
-            <label for="phone" class="sc-label">Telefon numarası</label>
-          </div>
-        </section>
+        <!-- ============ STEP 1: Contact + Address + Shipping ============ -->
+        <div id="step1Panel" class="sc-step-panel sc-step-panel-active">
+          <!-- Contact Section -->
+          <section class="sc-section">
+            <h2 class="sc-section-title">İletişim Bilgileri</h2>
+            <div class="sc-field">
+              <input type="email" id="email" class="sc-input" placeholder=" " required autocomplete="email">
+              <label for="email" class="sc-label">E-posta adresi</label>
+            </div>
+            <div class="sc-field">
+              <input type="tel" id="phone" class="sc-input" placeholder=" " required autocomplete="tel">
+              <label for="phone" class="sc-label">Telefon numarası</label>
+            </div>
+          </section>
 
-        <!-- Shipping Address Section -->
-        <section class="sc-section">
-          <h2 class="sc-section-title">Teslimat Adresi</h2>
-          <div class="sc-row">
-            <div class="sc-field sc-half">
-              <input type="text" id="firstName" class="sc-input" placeholder=" " required autocomplete="given-name">
-              <label for="firstName" class="sc-label">Ad</label>
-            </div>
-            <div class="sc-field sc-half">
-              <input type="text" id="lastName" class="sc-input" placeholder=" " required autocomplete="family-name">
-              <label for="lastName" class="sc-label">Soyad</label>
-            </div>
-          </div>
-          <div class="sc-field">
-            <input type="text" id="address" class="sc-input" placeholder=" " required autocomplete="street-address">
-            <label for="address" class="sc-label">Adres</label>
-          </div>
-          <div class="sc-field">
-            <input type="text" id="apartment" class="sc-input" placeholder=" " autocomplete="address-line2">
-            <label for="apartment" class="sc-label">Apartman, daire vb. (opsiyonel)</label>
-          </div>
-          <div class="sc-row">
-            <div class="sc-field sc-third">
-              <input type="text" id="city" class="sc-input" placeholder=" " required autocomplete="address-level2">
-              <label for="city" class="sc-label">Şehir</label>
-            </div>
-            <div class="sc-field sc-third">
-              <input type="text" id="district" class="sc-input" placeholder=" " required>
-              <label for="district" class="sc-label">İlçe</label>
-            </div>
-            <div class="sc-field sc-third">
-              <input type="text" id="zip" class="sc-input" placeholder=" " required autocomplete="postal-code">
-              <label for="zip" class="sc-label">Posta Kodu</label>
-            </div>
-          </div>
-          <div class="sc-field">
-            <div class="sc-select-wrap">
-              <select id="country" class="sc-input sc-select" required>
-                <option value="TR" selected>Türkiye</option>
-              </select>
-              <label for="country" class="sc-label sc-label-select">Ülke</label>
-            </div>
-          </div>
-        </section>
-
-        <!-- Shipping Method -->
-        <section class="sc-section">
-          <h2 class="sc-section-title">Kargo</h2>
-          <div class="sc-shipping-box">
-            <div class="sc-shipping-option">
-              <div class="sc-radio-checked">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="#b5a07c" stroke="none"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4" fill="#fff"/></svg>
+          <!-- Shipping Address Section -->
+          <section class="sc-section">
+            <h2 class="sc-section-title">Teslimat Adresi</h2>
+            <div class="sc-row">
+              <div class="sc-field sc-half">
+                <input type="text" id="firstName" class="sc-input" placeholder=" " required autocomplete="given-name">
+                <label for="firstName" class="sc-label">Ad</label>
               </div>
-              <span class="sc-shipping-name">Standart Kargo</span>
-              <span class="sc-shipping-price">Ücretsiz</span>
-            </div>
-          </div>
-        </section>
-
-        <!-- Payment Section -->
-        <section class="sc-section">
-          <h2 class="sc-section-title">Ödeme</h2>
-          <p class="sc-section-desc">Tüm işlemler güvenli ve şifrelenmiştir.</p>
-          <div class="sc-payment-box">
-            <div class="sc-payment-header">
-              <span>Kredi / Banka Kartı</span>
-              <div class="sc-card-icons">
-                <img src="https://cdn.shopify.com/shopifycloud/checkout-web/assets/c1.en/assets/visa.CLoRBtfM.svg" alt="Visa" height="24">
-                <img src="https://cdn.shopify.com/shopifycloud/checkout-web/assets/c1.en/assets/mastercard.1c4_lyMp.svg" alt="Mastercard" height="24">
+              <div class="sc-field sc-half">
+                <input type="text" id="lastName" class="sc-input" placeholder=" " required autocomplete="family-name">
+                <label for="lastName" class="sc-label">Soyad</label>
               </div>
             </div>
-            <div class="sc-stripe-element" id="card-element"></div>
-            <div id="card-errors" class="sc-card-errors" role="alert"></div>
-          </div>
-        </section>
+            <div class="sc-field">
+              <input type="text" id="address" class="sc-input" placeholder=" " required autocomplete="street-address">
+              <label for="address" class="sc-label">Adres</label>
+            </div>
+            <div class="sc-field">
+              <input type="text" id="apartment" class="sc-input" placeholder=" " autocomplete="address-line2">
+              <label for="apartment" class="sc-label">Apartman, daire vb. (opsiyonel)</label>
+            </div>
+            <div class="sc-row">
+              <div class="sc-field sc-third">
+                <input type="text" id="city" class="sc-input" placeholder=" " required autocomplete="address-level2">
+                <label for="city" class="sc-label">Şehir</label>
+              </div>
+              <div class="sc-field sc-third">
+                <input type="text" id="district" class="sc-input" placeholder=" " required>
+                <label for="district" class="sc-label">İlçe</label>
+              </div>
+              <div class="sc-field sc-third">
+                <input type="text" id="zip" class="sc-input" placeholder=" " required autocomplete="postal-code">
+                <label for="zip" class="sc-label">Posta Kodu</label>
+              </div>
+            </div>
+            <div class="sc-field">
+              <div class="sc-select-wrap">
+                <select id="country" class="sc-input sc-select" required>
+                  <option value="TR" selected>Türkiye</option>
+                </select>
+                <label for="country" class="sc-label sc-label-select">Ülke</label>
+              </div>
+            </div>
+          </section>
 
-        <!-- Legal Agreements -->
-        <section class="sc-section sc-legal-section">
-          <div class="sc-legal-check">
-            <input type="checkbox" id="agreementCheck" class="sc-checkbox" required>
-            <label for="agreementCheck" class="sc-checkbox-label">
-              <a href="#" id="openAgreement" class="sc-legal-link">Mesafeli Satış Sözleşmesi</a>'ni okudum ve kabul ediyorum. <span class="sc-required">*</span>
-            </label>
-          </div>
-          <div class="sc-legal-check">
-            <input type="checkbox" id="marketingCheck" class="sc-checkbox">
-            <label for="marketingCheck" class="sc-checkbox-label">
-              <a href="#" id="openMarketing" class="sc-legal-link">Ticari Elektronik İleti</a> almak istiyorum. (Opsiyonel)
-            </label>
-          </div>
-        </section>
+          <!-- Shipping Method -->
+          <section class="sc-section">
+            <h2 class="sc-section-title">Kargo</h2>
+            <div class="sc-shipping-box">
+              <div class="sc-shipping-option">
+                <div class="sc-radio-checked">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="#b5a07c" stroke="none"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4" fill="#fff"/></svg>
+                </div>
+                <span class="sc-shipping-name">Standart Kargo</span>
+                <span class="sc-shipping-price">Ücretsiz</span>
+              </div>
+            </div>
+          </section>
 
-        <!-- Submit -->
-        <button type="button" id="submitBtn" class="sc-submit-btn" disabled>
-          <span id="btnText">Siparişi Tamamla</span>
-          <span id="btnSpinner" class="sc-spinner" style="display:none;"></span>
-        </button>
+          <!-- Continue to Payment Button -->
+          <button type="button" id="continueBtn" class="sc-submit-btn">
+            Ödemeye Geç
+          </button>
+        </div>
 
-        <!-- Error message -->
-        <div id="globalError" class="sc-global-error" style="display:none;"></div>
+        <!-- ============ STEP 2: Payment + Legal ============ -->
+        <div id="step2Panel" class="sc-step-panel">
+          <!-- Back button -->
+          <button type="button" id="backBtn" class="sc-back-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+            Bilgilere Dön
+          </button>
+
+          <!-- Payment Section -->
+          <section class="sc-section">
+            <h2 class="sc-section-title">Ödeme</h2>
+            <p class="sc-section-desc">Tüm işlemler güvenli ve şifrelenmiştir.</p>
+            <div class="sc-payment-box">
+              <div class="sc-payment-header">
+                <span>Kredi / Banka Kartı</span>
+                <div class="sc-card-icons">
+                  <svg viewBox="0 0 780 500" class="sc-visa-icon" xmlns="http://www.w3.org/2000/svg"><path d="M293.2 348.7l33.4-195.8h53.3l-33.4 195.8zM540.7 157.4c-10.5-4-27-8.4-47.6-8.4-52.5 0-89.5 26.5-89.8 64.4-.3 28.1 26.4 43.7 46.6 53.1 20.7 9.6 27.7 15.7 27.6 24.3-.1 13.1-16.5 19.1-31.8 19.1-21.3 0-32.6-3-50.1-10.2l-6.9-3.1-7.5 43.8c12.4 5.5 35.4 10.2 59.3 10.5 55.9 0 92.2-26.2 92.5-66.7.2-22.2-14-39.1-44.6-53-18.6-9-30-15-29.9-24.2 0-8.1 9.6-16.8 30.4-16.8 17.4-.3 30 3.5 39.8 7.5l4.8 2.2 7.2-42.3zM666.5 152.9h-41c-12.7 0-22.2 3.5-27.8 16.1l-78.8 178.9h55.8s9.1-24 11.2-29.3l68.1.1c1.6 6.8 6.5 29.2 6.5 29.2h49.3l-43.3-195zm-65.5 125.8c4.4-11.2 21.2-54.5 21.2-54.5-.3.5 4.4-11.3 7-18.6l3.6 16.8s10.2 46.7 12.3 56.3h-44.1zM247.1 152.9l-52 133.4-5.6-27c-9.6-31-39.6-64.6-73.2-81.4l47.6 170.6h56.3l83.8-195.6z" fill="#1434CB"/><path d="M146.9 152.9H60.8l-.7 3.8c66.7 16.2 110.9 55.3 129.2 102.2L170.6 169c-3.2-12.3-12.5-15.8-23.7-16.1z" fill="#F7A823"/></svg>
+                  <svg viewBox="0 0 780 500" class="sc-mc-icon" xmlns="http://www.w3.org/2000/svg"><circle cx="299.2" cy="250" r="157.1" fill="#EB001B"/><circle cx="480.8" cy="250" r="157.1" fill="#F79E1B"/><path d="M390 113.4c-58.8 46-96.5 117.4-96.5 197.4s37.7 151.4 96.5 197.4c58.8-46 96.5-117.4 96.5-197.4S448.8 159.4 390 113.4z" fill="#FF5F00"/></svg>
+                </div>
+              </div>
+              <div class="sc-stripe-element" id="card-element"></div>
+              <div id="card-errors" class="sc-card-errors" role="alert"></div>
+            </div>
+          </section>
+
+          <!-- Legal Agreements -->
+          <section class="sc-section sc-legal-section">
+            <div class="sc-legal-check">
+              <input type="checkbox" id="agreementCheck" class="sc-checkbox" required>
+              <label for="agreementCheck" class="sc-checkbox-label">
+                <a href="#" id="openAgreement" class="sc-legal-link">Mesafeli Satış Sözleşmesi</a>'ni okudum ve kabul ediyorum. <span class="sc-required">*</span>
+              </label>
+            </div>
+            <div class="sc-legal-check">
+              <input type="checkbox" id="marketingCheck" class="sc-checkbox">
+              <label for="marketingCheck" class="sc-checkbox-label">
+                <a href="#" id="openMarketing" class="sc-legal-link">Ticari Elektronik İleti</a> almak istiyorum. (Opsiyonel)
+              </label>
+            </div>
+          </section>
+
+          <!-- Submit -->
+          <button type="button" id="submitBtn" class="sc-submit-btn" disabled>
+            <span id="btnText">Siparişi Tamamla</span>
+            <span id="btnSpinner" class="sc-spinner" style="display:none;"></span>
+          </button>
+
+          <!-- Error message -->
+          <div id="globalError" class="sc-global-error" style="display:none;"></div>
+        </div>
 
         <!-- Footer -->
         <div class="sc-footer-links">

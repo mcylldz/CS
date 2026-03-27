@@ -1,5 +1,5 @@
 /* ========================================
-   SVELTE CHIC — Checkout JS
+   SVELTE CHIC — Checkout JS (2-Step)
    ======================================== */
 
 (function () {
@@ -13,6 +13,7 @@
   let stripeInstance = null;
   let cardElement = null;
   let isProcessing = false;
+  let currentStep = 1;
 
   // ---- URL Params ----
   const params = new URLSearchParams(window.location.search);
@@ -106,8 +107,6 @@
 
   // ---- Stripe Init ----
   function initStripe() {
-    // Stripe publishable key is loaded from a meta tag or hardcoded
-    // For security, we fetch it from the server
     fetch('/api/create-payment', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -143,10 +142,9 @@
             errEl.textContent = '';
             errEl.style.display = 'none';
           }
-          updateSubmitState();
         });
 
-        // Enable submit button
+        // Enable submit button once Stripe is ready
         document.getElementById('submitBtn').disabled = false;
       }
     })
@@ -156,11 +154,57 @@
     });
   }
 
+  // ======== STEP NAVIGATION ========
+  function goToStep(step) {
+    currentStep = step;
+    var panel1 = document.getElementById('step1Panel');
+    var panel2 = document.getElementById('step2Panel');
+    var label1 = document.getElementById('stepLabel1');
+    var label2 = document.getElementById('stepLabel2');
+
+    if (step === 1) {
+      panel1.classList.add('sc-step-panel-active');
+      panel2.classList.remove('sc-step-panel-active');
+      label1.classList.add('sc-step-active');
+      label1.classList.remove('sc-step-completed');
+      label2.classList.remove('sc-step-active');
+    } else {
+      panel1.classList.remove('sc-step-panel-active');
+      panel2.classList.add('sc-step-panel-active');
+      label1.classList.remove('sc-step-active');
+      label1.classList.add('sc-step-completed');
+      label2.classList.add('sc-step-active');
+    }
+
+    // Scroll to top of form
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function handleContinue() {
+    // Validate Step 1 fields
+    if (!validateStep1()) {
+      showGlobalError('Lütfen tüm zorunlu alanları doldurun.');
+      return;
+    }
+    hideGlobalError();
+    goToStep(2);
+  }
+
+  function validateStep1() {
+    var fields = ['email', 'phone', 'firstName', 'lastName', 'address', 'city', 'district', 'zip'];
+    var allValid = true;
+    fields.forEach(function(id) {
+      var el = document.getElementById(id);
+      if (!validateField(el)) allValid = false;
+    });
+    return allValid;
+  }
+
   // ---- Bind Events ----
   function bindEvents() {
     // Summary toggle (mobile)
-    const toggleBtn = document.getElementById('summaryToggle');
-    const summaryContent = document.getElementById('summaryContent');
+    var toggleBtn = document.getElementById('summaryToggle');
+    var summaryContent = document.getElementById('summaryContent');
     if (toggleBtn) {
       toggleBtn.addEventListener('click', function () {
         toggleBtn.classList.toggle('sc-open');
@@ -174,12 +218,27 @@
       if (e.key === 'Enter') { e.preventDefault(); applyCoupon(); }
     });
 
+    // Step navigation
+    document.getElementById('continueBtn').addEventListener('click', handleContinue);
+    document.getElementById('backBtn').addEventListener('click', function() { goToStep(1); });
+
+    // Breadcrumb step clicks
+    document.getElementById('stepLabel1').addEventListener('click', function() {
+      goToStep(1);
+    });
+    document.getElementById('stepLabel2').addEventListener('click', function() {
+      if (validateStep1()) {
+        hideGlobalError();
+        goToStep(2);
+      }
+    });
+
     // Submit
     document.getElementById('submitBtn').addEventListener('click', handleSubmit);
 
-    // Form validation on change
-    const inputs = document.querySelectorAll('.sc-input[required]');
-    inputs.forEach(input => {
+    // Form validation on blur
+    var inputs = document.querySelectorAll('.sc-input[required]');
+    inputs.forEach(function(input) {
       input.addEventListener('blur', function () {
         validateField(this);
       });
@@ -233,7 +292,7 @@
       const data = await resp.json();
       if (data.valid) {
         appliedCoupon = code;
-        discountAmount = data.discount_amount; // in kuruş
+        discountAmount = data.discount_amount;
         msgEl.textContent = `✓ "${code}" uygulandı`;
         msgEl.className = 'sc-coupon-msg sc-success';
         codeInput.disabled = true;
@@ -271,10 +330,6 @@
       if (!validateField(el)) allValid = false;
     });
     return allValid;
-  }
-
-  function updateSubmitState() {
-    // Just ensure stripe is ready
   }
 
   // ---- Handle Submit ----
@@ -390,7 +445,6 @@
         const orderData = await orderResp.json();
 
         if (orderData.error) {
-          // Payment succeeded but order creation had an issue — still redirect
           console.error('Order creation issue:', orderData.error);
         }
 
@@ -419,7 +473,6 @@
   }
 
   function formatMoney(cents) {
-    // Shopify cents → TRY format: 528820 → "5.288,20TL"
     const amount = (cents / 100).toFixed(2);
     const parts = amount.split('.');
     const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -466,6 +519,7 @@
       zip: val('zip') || '___'
     };
     var fullAddress = ci.address + (ci.apartment ? ', ' + ci.apartment : '') + ', ' + ci.district + ', ' + ci.city + ' ' + ci.zip;
+    var fullName = escapeHtml(ci.firstName + ' ' + ci.lastName);
     var today = new Date();
     var dateStr = today.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
@@ -475,45 +529,147 @@
 
     var total = subtotal - discountAmount;
 
-    return '<h4>MADDE 1 — TARAFLAR</h4>' +
-      '<p><strong>SATICI:</strong></p>' +
-      '<table><tr><td>Ticaret Unvanı</td><td>MESU L.L.C-F.Z</td></tr>' +
-      '<tr><td>Marka Adı</td><td>Svelte Chic</td></tr>' +
+    return '<h3 style="text-align:center;margin-bottom:4px;">MESAFELİ SATIŞ SÖZLEŞMESİ</h3>' +
+      '<p style="text-align:center;font-size:11px;color:#888;margin-bottom:16px;">Son G\u00fcncelleme Tarihi: 27 Mart 2026</p>' +
+      '<p>\u0130\u015fbu Mesafeli Sat\u0131\u015f S\u00f6zle\u015fmesi ("\u015eS\u00f6zle\u015fme"), 6502 say\u0131l\u0131 T\u00fcketicinin Korunmas\u0131 Hakk\u0131nda Kanun ve Mesafeli S\u00f6zle\u015fmeler Y\u00f6netmeli\u011fi h\u00fck\u00fcmleri \u00e7er\u00e7evesinde, a\u015fa\u011f\u0131da bilgileri yer alan SATICI ile ALICI aras\u0131nda, elektronik ortamda kurulmu\u015ftur.</p>' +
+
+      '<h4>MADDE 1 \u2014 TARAFLAR</h4>' +
+      '<p><strong>1.1 SATICI B\u0130LG\u0130LER\u0130</strong></p>' +
+      '<table>' +
+      '<tr><td>Ticaret Unvan\u0131</td><td>MESU L.L.C-F.Z</td></tr>' +
+      '<tr><td>Marka Ad\u0131</td><td>Thesveltechic / Svelte Chic</td></tr>' +
       '<tr><td>Adres</td><td>Meydan Grandstand, 6th Floor, Meydan Road, Nad Al Sheba, Dubai, BAE</td></tr>' +
       '<tr><td>Telefon</td><td>+971 56 850 8810</td></tr>' +
       '<tr><td>E-posta</td><td>destek@thesveltechic.com</td></tr>' +
-      '<tr><td>Web Sitesi</td><td>www.thesveltechic.com</td></tr></table>' +
-      '<p><strong>ALICI:</strong></p>' +
-      '<table><tr><td>Ad Soyad</td><td>' + escapeHtml(ci.firstName + ' ' + ci.lastName) + '</td></tr>' +
+      '<tr><td>Web Sitesi</td><td>www.thesveltechic.com</td></tr>' +
+      '</table>' +
+      '<p>(Bundan b\u00f6yle "SATICI", "\u0130\u015eLETME", "Thesveltechic" veya "\u015eirket" olarak an\u0131lacakt\u0131r.)</p>' +
+
+      '<p><strong>1.2 ALICI B\u0130LG\u0130LER\u0130</strong></p>' +
+      '<table>' +
+      '<tr><td>Ad Soyad</td><td>' + fullName + '</td></tr>' +
       '<tr><td>E-posta</td><td>' + escapeHtml(ci.email) + '</td></tr>' +
       '<tr><td>Telefon</td><td>' + escapeHtml(ci.phone) + '</td></tr>' +
-      '<tr><td>Teslimat Adresi</td><td>' + escapeHtml(fullAddress) + '</td></tr></table>' +
-      '<h4>MADDE 2 — SÖZLEŞMENİN KONUSU</h4>' +
-      '<p>İşbu Mesafeli Satış Sözleşmesi, SATICI\'nın www.thesveltechic.com internet sitesi üzerinden elektronik ortamda ALICI\'ya satışını yaptığı aşağıda nitelikleri ve satış fiyatı belirtilen ürün/ürünlerin satışı ve teslimi ile ilgili olarak 6502 sayılı Tüketicinin Korunması Hakkında Kanun ve Mesafele Sözleşmeler Yönetmeliği hükümleri gereğince tarafların hak ve yükümlülüklerini düzenler.</p>' +
-      '<h4>MADDE 3 — SÖZLEŞME KONUSU ÜRÜN BİLGİLERİ</h4>' +
-      '<table><tr><td><strong>Ürün</strong></td><td><strong>Varyant</strong></td><td><strong>Adet</strong></td><td><strong>Tutar</strong></td></tr>' + itemsHtml + '</table>' +
-      '<table><tr><td>Ara Toplam</td><td>' + formatMoney(subtotal) + '</td></tr>' +
-      (discountAmount > 0 ? '<tr><td>İndirim' + (appliedCoupon ? ' (' + appliedCoupon + ')' : '') + '</td><td>-' + formatMoney(discountAmount) + '</td></tr>' : '') +
-      '<tr><td>Kargo</td><td>Ücretsiz</td></tr>' +
-      '<tr><td><strong>Toplam</strong></td><td><strong>' + formatMoney(total) + '</strong></td></tr></table>' +
-      '<h4>MADDE 4 — GENEL HÜKÜMLER</h4>' +
-      '<p>4.1. ALICI, SATICI\'ya ait www.thesveltechic.com internet sitesinde sözleşme konusu ürünün temel nitelikleri, satış fiyatı ve ödeme şekli ile teslimata ilişkin ön bilgileri okuyup bilgi sahibi olduğunu ve elektronik ortamda gerekli onayı verdiğini kabul, beyan ve taahhüt eder.</p>' +
-      '<p>4.2. Sözleşme konusu her bir ürün, yasal 30 günlük süreyi aşmamak koşulu ile ALICI\'nın yerleşim yeri uzaklığına bağlı olarak internet sitesindeki ön bilgiler kısmında belirtilen süre zarfında ALICI veya ALICI\'nın gösterdiği adresteki kişi ve/veya kuruluşa teslim edilir.</p>' +
-      '<p>4.3. Sözleşme konusu ürün, ALICI\'dan başka bir kişi/kuruluşa teslim edilecek ise, teslim edilecek kişi/kuruluşun teslimatı kabul etmemesinden SATICI sorumlu tutulamaz.</p>' +
-      '<h4>MADDE 5 — ÖDEME VE TESLİMAT</h4>' +
-      '<p>5.1. Ödeme, ALICI tarafından kredi kartı/banka kartı ile gerçekleştirilir. Ödeme işlemi güvenli ödeme altyapısı (Stripe) üzerinden şifrelenerek yapılır.</p>' +
-      '<p>5.2. Kargo ücreti SATICI tarafından karşılanır (Ücretsiz Kargo).</p>' +
-      '<p>5.3. Teslimat, kargoya verildiği tarihten itibaren ortalama 3-7 iş günü içerisinde yapılır.</p>' +
-      '<h4>MADDE 6 — CAYMA HAKKI</h4>' +
-      '<p>6.1. ALICI, sözleşme konusu ürünün kendisine veya gösterdiği adresteki kişi/kuruluşa tesliminden itibaren 14 (on dört) gün içerisinde cayma hakkını kullanabilir.</p>' +
-      '<p>6.2. Cayma hakkının kullanılması için bu süre içinde SATICI\'ya destek@thesveltechic.com adresinden e-posta ile veya +971 56 850 8810 numaralı telefonla bildirimde bulunulması ve ürünün kullanılmamış olması şarttır.</p>' +
-      '<p>6.3. Cayma hakkı kapsamında iade edilen ürünlerin kargo bedeli ALICI tarafından karşılanır.</p>' +
-      '<h4>MADDE 7 — UYUŞMAZLIK ÇÖZÜMÜ</h4>' +
-      '<p>İşbu sözleşmeden doğan uyuşmazlıklarda Dubai mahkemeleri ve icra daireleri yetkilidir.</p>' +
-      '<h4>MADDE 8 — YÜRÜRLÜK</h4>' +
-      '<p>ALICI, işbu sözleşmeyi elektronik ortamda onaylayarak tüm şartları kabul etmiş sayılır. Sözleşme, onay tarihinde yürürlüğe girer.</p>' +
-      '<p><strong>Sözleşme Tarihi:</strong> ' + dateStr + '</p>' +
-      '<p><strong>ALICI:</strong> ' + escapeHtml(ci.firstName + ' ' + ci.lastName) + '</p>';
+      '<tr><td>Teslimat Adresi</td><td>' + escapeHtml(fullAddress) + '</td></tr>' +
+      '</table>' +
+      '<p>(Bundan b\u00f6yle "ALICI", "M\u00dc\u015eTER\u0130" veya "T\u00dcKET\u0130C\u0130" olarak an\u0131lacakt\u0131r.)</p>' +
+
+      '<h4>MADDE 2 \u2014 S\u00d6ZLE\u015eMEN\u0130N KONUSU</h4>' +
+      '<p>2.1. \u0130\u015fbu S\u00f6zle\u015fme\u2019nin konusu, ALICI\u2019n\u0131n www.thesveltechic.com internet sitesi \u00fczerinden elektronik ortamda sipari\u015fini verdigi, a\u015fa\u011f\u0131da nitelikleri ve sat\u0131\u015f fiyat\u0131 belirtilen \u00fcr\u00fcn(ler)in sat\u0131\u015f\u0131 ve teslimi ile ilgili olarak 6502 say\u0131l\u0131 T\u00fcketicinin Korunmas\u0131 Hakk\u0131nda Kanun ve Mesafeli S\u00f6zle\u015fmeler Y\u00f6netmeli\u011fi h\u00fck\u00fcmleri gere\u011fince taraflar\u0131n hak ve y\u00fck\u00fcml\u00fcklerinin saptanmas\u0131d\u0131r.</p>' +
+      '<p>2.2. ALICI, i\u015fbu S\u00f6zle\u015fme\u2019yi onaylayarak; sipari\u015f konusu \u00fcr\u00fcn\u00fcn temel nitelikleri, sat\u0131\u015f fiyat\u0131, \u00f6deme \u015fekli, teslimat ko\u015fullar\u0131 ve cayma hakk\u0131 ile ilgili t\u00fcm \u00f6n bilgilendirmeyi okuyup anlad\u0131\u011f\u0131n\u0131 ve elektronik ortamda gerekli onay\u0131 verdi\u011fini kabul, beyan ve taahh\u00fct eder.</p>' +
+      '<p>2.3. \u0130\u015fbu S\u00f6zle\u015fme, ALICI taraf\u0131ndan sipari\u015f sayfas\u0131nda yer alan "Mesafeli Sat\u0131\u015f S\u00f6zle\u015fmesi\u2019ni, Kullan\u0131m \u015eartlar\u0131\u2019n\u0131, \u0130ade ve De\u011fi\u015fim Politikas\u0131\u2019n\u0131, Kargo Politikas\u0131\u2019n\u0131, Gizlilik Politikas\u0131\u2019n\u0131 ve KVKK Ayd\u0131nlatma Metni\u2019ni okudum, anlad\u0131m ve kabul ediyorum" ibaresinin onaylanmas\u0131 (checkbox i\u015faretlenmesi) ile birlikte kurulmu\u015f say\u0131l\u0131r.</p>' +
+
+      '<h4>MADDE 3 \u2014 \u00dcR\u00dcN B\u0130LG\u0130LER\u0130</h4>' +
+      '<p>3.1. Sipari\u015f konusu \u00fcr\u00fcn(ler)in bilgileri:</p>' +
+      '<table><tr><td><strong>\u00dcr\u00fcn</strong></td><td><strong>Varyant</strong></td><td><strong>Adet</strong></td><td><strong>Tutar</strong></td></tr>' + itemsHtml + '</table>' +
+      '<table>' +
+      '<tr><td>Ara Toplam</td><td>' + formatMoney(subtotal) + '</td></tr>' +
+      (discountAmount > 0 ? '<tr><td>\u0130ndirim' + (appliedCoupon ? ' (' + appliedCoupon + ')' : '') + '</td><td>-' + formatMoney(discountAmount) + '</td></tr>' : '') +
+      '<tr><td>Kargo</td><td>\u00dccretsiz</td></tr>' +
+      '<tr><td><strong>Toplam</strong></td><td><strong>' + formatMoney(total) + '</strong></td></tr>' +
+      '</table>' +
+      '<p>3.2. Sipari\u015f onay sayfas\u0131nda ve e-postas\u0131nda belirtilen bilgiler i\u015fbu S\u00f6zle\u015fme\u2019nin ayr\u0131lmaz par\u00e7as\u0131d\u0131r.</p>' +
+      '<p>3.3. \u00dcr\u00fcn fiyatlar\u0131na KDV ve sair vergiler dahildir. Kargo \u00fccreti ayr\u0131ca belirtilmedik\u00e7e SATICI taraf\u0131ndan kar\u015f\u0131lan\u0131r.</p>' +
+
+      '<h4>MADDE 4 \u2014 S\u0130PAR\u0130\u015e VE \u00d6DEME</h4>' +
+      '<p>4.1. ALICI, www.thesveltechic.com \u00fczerinden sipari\u015f vererek i\u015fbu S\u00f6zle\u015fme\u2019nin t\u00fcm h\u00fck\u00fcmlerini kabul etmi\u015f say\u0131l\u0131r.</p>' +
+      '<p>4.2. \u00d6demeler, Stripe \u00f6deme altyap\u0131s\u0131 arac\u0131l\u0131\u011f\u0131yla kredi kart\u0131/banka kart\u0131 ile ger\u00e7ekle\u015ftirilir.</p>' +
+      '<p>4.3. SATICI, g\u00fcvenlik gerek\u00e7esiyle sipari\u015flerde ek do\u011frulama talep etme hakk\u0131n\u0131 sakl\u0131 tutar. Do\u011frulama tamamlanmayan sipari\u015fler ask\u0131ya al\u0131nabilir veya iptal edilebilir.</p>' +
+      '<p>4.4. Sipari\u015f onay\u0131, \u00f6demenin ba\u015far\u0131l\u0131 \u015fekilde tamamlanmas\u0131 ve SATICI taraf\u0131ndan sipari\u015fin kabul edilmesi ile ger\u00e7ekle\u015fir. SATICI, herhangi bir sipari\u015fi kabul etmeme hakk\u0131n\u0131 sakl\u0131 tutar.</p>' +
+
+      '<h4>MADDE 5 \u2014 TESL\u0130MAT KO\u015eULLARI</h4>' +
+      '<p>5.1. Sipari\u015fler, \u00f6demenin onaylanmas\u0131n\u0131 takiben 2 (iki) ila 4 (d\u00f6rt) i\u015f g\u00fcn\u00fc i\u00e7erisinde kargoya verilir.</p>' +
+      '<p>5.2. Tahmini teslimat s\u00fcresi, kargoya verilme tarihinden itibaren 15 (on be\u015f) ila 20 (yirmi) i\u015f g\u00fcn\u00fcd\u00fcr.</p>' +
+      '<p>5.3. Kampanya d\u00f6nemleri, bayram ve tatil d\u00f6nemleri, sezonluk yo\u011funluklar ve benzeri ola\u011fan\u00fcst\u00fc durumlarda, teslimat s\u00fcresine ek 5 (be\u015f) i\u015f g\u00fcn\u00fc eklenebilir.</p>' +
+      '<p>5.4. Kontrol\u00fcm\u00fcz d\u0131\u015f\u0131nda ger\u00e7ekle\u015fen durumlar (do\u011fal afetler, pandemi, g\u00fcmr\u00fck i\u015flemleri, tatiller, hava ko\u015fullar\u0131, kargo \u015firketinden kaynaklanan gecikmeler vb.) nedeniyle teslimat s\u00fcresi uzayabilir.</p>' +
+      '<p>5.5. Kargo \u015firketine teslim edilen \u00fcr\u00fcnlerin m\u00fclkiyet ve hasar riski, \u00fcr\u00fcn\u00fcn kargo \u015firketine teslimi ile birlikte ALICI\u2019ya ge\u00e7er.</p>' +
+      '<p>5.6. Teslimat, ALICI\u2019n\u0131n sipari\u015f s\u0131ras\u0131nda bildirdi\u011fi adrese yap\u0131l\u0131r. Adres bilgilerinin hatal\u0131 veya eksik girilmesinden kaynaklanan sorumluluk tamamen ALICI\u2019ya aittir.</p>' +
+
+      '<h4>MADDE 6 \u2014 CAYMA HAKKI</h4>' +
+      '<p><strong>6.1. \u0130ndirimsiz (Tam Fiyatl\u0131) \u00dcr\u00fcnlerde Cayma Hakk\u0131</strong></p>' +
+      '<p>6.1.1. ALICI, indirimsiz (tam fiyatl\u0131) \u00fcr\u00fcnlerde, \u00fcr\u00fcn\u00fcn teslim tarihinden itibaren 14 (on d\u00f6rt) g\u00fcn i\u00e7erisinde herhangi bir gerek\u00e7e g\u00f6stermeksizin ve cezai \u015fart \u00f6demeksizin cayma hakk\u0131n\u0131 kullanabilir.</p>' +
+      '<p>6.1.2. Cayma hakk\u0131n\u0131n kullan\u0131labilmesi i\u00e7in \u00fcr\u00fcn\u00fcn; kullan\u0131lmam\u0131\u015f, y\u0131kanmam\u0131\u015f, deforme olmam\u0131\u015f, etiketleri s\u00f6k\u00fclmemi\u015f ve orijinal ambalaj\u0131nda iade edilmesi zorunludur.</p>' +
+      '<p>6.1.3. Cayma hakk\u0131n\u0131n kullan\u0131lmas\u0131 halinde ALICI, \u00fcr\u00fcn\u00fc destek@thesveltechic.com adresine yaz\u0131l\u0131 olarak bildirimde bulunduktan sonra SATICI taraf\u0131ndan belirtilen adrese g\u00f6nderir. \u0130ade kargo \u00fccreti ALICI\u2019ya aittir.</p>' +
+      '<p>6.1.4. \u0130ade edilen \u00fcr\u00fcn\u00fcn SATICI\u2019ya ula\u015fmas\u0131 ve \u00fcr\u00fcn\u00fcn iade \u015fartlar\u0131n\u0131 kar\u015f\u0131lad\u0131\u011f\u0131n\u0131n tespit edilmesini takiben, \u00fcr\u00fcn bedeli 14 (on d\u00f6rt) g\u00fcn i\u00e7erisinde ALICI\u2019n\u0131n \u00f6deme yapt\u0131\u011f\u0131 \u00f6deme arac\u0131na iade edilir.</p>' +
+
+      '<p><strong>6.2. \u0130ndirimli / Kampanyal\u0131 \u00dcr\u00fcnlerde Cayma Hakk\u0131 K\u0131s\u0131tlamas\u0131</strong></p>' +
+      '<p>6.2.1. \u0130ndirimli, kampanyal\u0131, promosyonlu veya \u00f6zel fiyatl\u0131 \u00fcr\u00fcnlerde para iadesi yap\u0131lmaz. ALICI, bu \u00fcr\u00fcnlerde yaln\u0131zca 1 (bir) defaya mahsus de\u011fi\u015fim hakk\u0131na sahiptir.</p>' +
+      '<p>6.2.2. ALICI, i\u015fbu maddeyi \u00f6zellikle okuyup anlad\u0131\u011f\u0131n\u0131, indirimli \u00fcr\u00fcn sat\u0131n al\u0131rken bu ko\u015fulu bilerek ve isteyerek kabul etti\u011fini beyan ve taahh\u00fct eder.</p>' +
+      '<p>6.2.3. De\u011fi\u015fim hakk\u0131n\u0131n kullan\u0131lmas\u0131 halinde:</p>' +
+      '<p>(a) De\u011fi\u015fim talep edilen yeni \u00fcr\u00fcn\u00fcn bedeli, iade edilen \u00fcr\u00fcn\u00fcn bedelinden d\u00fc\u015f\u00fckse: Aradaki fark ALICI\u2019ya nakit olarak iade edilmez; fark tutar\u0131, ALICI ad\u0131na \u0130\u015eLETME b\u00fcnyesinde bakiye olarak tan\u0131mlan\u0131r. Bu bakiye, 12 (on iki) ay s\u00fcreyle ge\u00e7erlidir.</p>' +
+      '<p>(b) De\u011fi\u015fim talep edilen yeni \u00fcr\u00fcn\u00fcn bedeli, iade edilen \u00fcr\u00fcn\u00fcn bedelinden y\u00fcksekse: ALICI, aradaki fark\u0131 SATICI\u2019ya \u00f6der.</p>' +
+      '<p>(c) De\u011fi\u015fim talep edilen yeni \u00fcr\u00fcn\u00fcn bedeli, iade edilen \u00fcr\u00fcn\u00fcn bedeline e\u015fitse: Herhangi bir ek \u00f6deme veya bakiye s\u00f6z konusu olmaz.</p>' +
+      '<p>6.2.4. De\u011fi\u015fim hakk\u0131, \u00fcr\u00fcn\u00fcn teslim tarihinden itibaren 14 (on d\u00f6rt) g\u00fcn i\u00e7erisinde kullan\u0131lmal\u0131d\u0131r.</p>' +
+
+      '<p><strong>6.3. Cayma Hakk\u0131n\u0131n Kullan\u0131lamayaca\u011f\u0131 Haller</strong></p>' +
+      '<p>6.3.1. Mesafeli S\u00f6zle\u015fmeler Y\u00f6netmeli\u011fi m.15 gere\u011fince, a\u015fa\u011f\u0131daki hallerde cayma hakk\u0131 kullan\u0131lamaz:</p>' +
+      '<p>(a) Fiyat\u0131 finansal piyasalardaki dalgalanmalara ba\u011fl\u0131 olarak de\u011fi\u015fen ve SATICI\u2019n\u0131n kontrol\u00fcnde olmayan \u00fcr\u00fcnler.</p>' +
+      '<p>(b) T\u00fcketicinin istekleri veya ki\u015fisel ihtiya\u00e7lar\u0131 do\u011frultusunda haz\u0131rlanan, ki\u015fiye \u00f6zel \u00fcretilen \u00fcr\u00fcnler.</p>' +
+      '<p>(c) \u00c7abuk bozulabilen veya son kullanma tarihi ge\u00e7ebilecek \u00fcr\u00fcnler.</p>' +
+      '<p>(d) Tesliminden sonra ambalaj\u0131 a\u00e7\u0131lm\u0131\u015f olan; sa\u011fl\u0131k ve hijyen a\u00e7\u0131s\u0131ndan iade edilemeyecek \u00fcr\u00fcnler (i\u00e7 giyim, mayo, bikini, \u00e7orap vb.).</p>' +
+      '<p>(e) Tesliminden sonra ba\u015fka \u00fcr\u00fcnlerle kar\u0131\u015fan ve do\u011fas\u0131 gere\u011fi ayr\u0131\u015ft\u0131r\u0131lmas\u0131 m\u00fcmk\u00fcn olmayan \u00fcr\u00fcnler.</p>' +
+
+      '<h4>MADDE 7 \u2014 STOK DURUMU VE ALTERNAT\u0130F \u00dcR\u00dcN</h4>' +
+      '<p>7.1. SATICI\u2019n\u0131n sundu\u011fu \u00fcr\u00fcnlerin stoklar\u0131 s\u0131n\u0131rl\u0131 olup, stok durumu h\u0131zla de\u011fi\u015fkenlik g\u00f6sterebilir.</p>' +
+      '<p>7.2. Sipari\u015f verilen \u00fcr\u00fcn\u00fcn stoklar\u0131n\u0131n t\u00fckenmesi halinde, SATICI en k\u0131sa s\u00fcrede ALICI\u2019y\u0131 bilgilendirir ve ALICI\u2019ya \u015fu se\u00e7enekleri sunar: (a) ALICI, sipari\u015f tutar\u0131 dahilinde veya fark \u00f6deyerek ba\u015fka bir \u00fcr\u00fcn se\u00e7ebilir. (b) ALICI\u2019n\u0131n yeni \u00fcr\u00fcn se\u00e7memesi halinde, sipari\u015f tutar\u0131 \u0130\u015eLETME b\u00fcnyesinde ALICI ad\u0131na bakiye olarak tan\u0131mlan\u0131r (12 ay ge\u00e7erli).</p>' +
+      '<p>7.3. Bu senaryoda nakit para iadesi yap\u0131lmaz.</p>' +
+
+      '<h4>MADDE 8 \u2014 GARANT\u0130 VE AYIPLI \u00dcR\u00dcN</h4>' +
+      '<p>8.1. ALICI\u2019ya teslim edilen \u00fcr\u00fcn\u00fcn ay\u0131pl\u0131 (kusurlu, hasarl\u0131, hatal\u0131) olmas\u0131 halinde, ay\u0131pl\u0131 \u00fcr\u00fcn i\u00e7in para iadesi yap\u0131lmaz; yaln\u0131zca de\u011fi\u015fim uygulan\u0131r.</p>' +
+      '<p>8.2. ALICI, sipari\u015f vererek ve i\u015fbu S\u00f6zle\u015fme\u2019yi onaylayarak, ay\u0131pl\u0131 \u00fcr\u00fcn halinde yaln\u0131zca de\u011fi\u015fim hakk\u0131n\u0131n bulundu\u011funu, para iadesi talep edemeyece\u011fini a\u00e7\u0131k\u00e7a kabul ve beyan eder.</p>' +
+      '<p>8.3. Ay\u0131pl\u0131 \u00fcr\u00fcn bildirimi, \u00fcr\u00fcn\u00fcn teslim tarihinden itibaren 3 (\u00fc\u00e7) g\u00fcn i\u00e7erisinde, \u00fcr\u00fcn\u00fcn foto\u011fraflar\u0131 ile birlikte destek@thesveltechic.com adresine yaz\u0131l\u0131 olarak yap\u0131lmal\u0131d\u0131r.</p>' +
+      '<p>8.4. SATICI, ay\u0131b\u0131n teyit edilmesi halinde, ALICI\u2019ya ayn\u0131 \u00fcr\u00fcn\u00fcn yenisi veya ALICI\u2019n\u0131n onay\u0131yla e\u015fde\u011fer bir \u00fcr\u00fcn g\u00f6nderilir. De\u011fi\u015fim kargo \u00fccreti \u0130\u015eLETME taraf\u0131ndan kar\u015f\u0131lan\u0131r.</p>' +
+
+      '<h4>MADDE 9 \u2014 \u00d6DEME \u0130ADES\u0130 KO\u015eULLARI</h4>' +
+      '<p>9.1. Para iadesi hakk\u0131 do\u011fan hallerde (Madde 6.1 kapsam\u0131nda cayma hakk\u0131n\u0131n usul\u00fcne uygun kullan\u0131lmas\u0131), iade edilen \u00fcr\u00fcn\u00fcn SATICI\u2019ya ula\u015fmas\u0131n\u0131 ve kontrol edilmesini takiben, \u00fcr\u00fcn bedeli 14 (on d\u00f6rt) i\u015f g\u00fcn\u00fc i\u00e7erisinde ALICI\u2019n\u0131n \u00f6deme yapt\u0131\u011f\u0131 \u00f6deme arac\u0131na iade edilir.</p>' +
+      '<p>9.2. \u00d6deme kurulu\u015funun iade i\u015flemini ALICI\u2019n\u0131n hesab\u0131na yans\u0131tma s\u00fcresi SATICI\u2019n\u0131n kontrol\u00fcnde de\u011fildir.</p>' +
+      '<p>9.3. Para iadesine hak kazan\u0131lmayan hallerde (indirimli \u00fcr\u00fcnler, stok t\u00fckenmesi vb.) ALICI\u2019ya bakiye tan\u0131mlan\u0131r; nakit iade yap\u0131lmaz.</p>' +
+
+      '<h4>MADDE 10 \u2014 TERS \u0130BRAZ (CHARGEBACK / DISPUTE) POL\u0130T\u0130KASI</h4>' +
+      '<p>10.1. ALICI, i\u015fbu S\u00f6zle\u015fme kapsam\u0131nda bir uyu\u015fmazl\u0131k ya\u015famas\u0131 halinde, \u00f6ncelikle SATICI ile do\u011frudan ileti\u015fime ge\u00e7erek (destek@thesveltechic.com) sorunu \u00e7\u00f6zmeyi kabul ve taahh\u00fct eder.</p>' +
+      '<p>10.2. ALICI\u2019n\u0131n, SATICI ile ileti\u015fime ge\u00e7meksizin do\u011frudan \u00f6deme kurulu\u015funa ba\u015fvurarak ters ibraz ba\u015flatmas\u0131 halinde, SATICI bu i\u015fleme itiraz etme hakk\u0131n\u0131 sakl\u0131 tutar.</p>' +
+      '<p>10.3. Haks\u0131z veya k\u00f6t\u00fc niyetli ters ibraz i\u015flemi ba\u015flatan ALICI, SATICI\u2019n\u0131n bu sebeple u\u011frad\u0131\u011f\u0131 do\u011frudan ve dolayl\u0131 t\u00fcm zararlar\u0131 tazmin etmeyi kabul ve taahh\u00fct eder.</p>' +
+
+      '<h4>MADDE 11 \u2014 F\u0130KR\u0130 M\u00dcLK\u0130YET VE MARKA KORUMA</h4>' +
+      '<p>11.1. www.thesveltechic.com internet sitesinde yer alan t\u00fcm i\u00e7erik SATICI\u2019n\u0131n m\u00fcnhas\u0131r m\u00fclkiyetindedir ve fikri m\u00fclkiyet haklar\u0131 kapsam\u0131nda korunmaktad\u0131r.</p>' +
+      '<p>11.2. ALICI, SATICI\u2019n\u0131n yaz\u0131l\u0131 izni olmaks\u0131z\u0131n site i\u00e7eri\u011fini kopyalayamaz, \u00e7o\u011faltamaz, da\u011f\u0131tamaz, yay\u0131nlayamaz veya ticari ama\u00e7larla kullanamaz.</p>' +
+
+      '<h4>MADDE 12 \u2014 G\u0130ZL\u0130L\u0130K, \u0130T\u0130BAR KORUMA VE SOSYAL MEDYA H\u00dcK\u00dcMLER\u0130</h4>' +
+      '<p>12.1.1. ALICI, SATICI ile aras\u0131ndaki ticari ili\u015fki kapsam\u0131nda edindi\u011fi bilgileri \u00fc\u00e7\u00fcnc\u00fc ki\u015filerle payla\u015fmamay\u0131 kabul ve taahh\u00fct eder.</p>' +
+      '<p>12.2.1. ALICI, SATICI, markas\u0131, \u00fcr\u00fcnleri, hizmetleri hakk\u0131nda; ger\u00e7e\u011fe ayk\u0131r\u0131, yan\u0131lt\u0131c\u0131, karalayac\u0131, a\u015fa\u011f\u0131lay\u0131c\u0131, iftira niteli\u011finde veya ticari itibar\u0131 zedeleyici nitelikte beyanda bulunmamay\u0131 kabul ve taahh\u00fct eder.</p>' +
+      '<p>12.2.4. ALICI, \u015fikayetini \u00f6ncelikle ve m\u00fcnhas\u0131ran SATICI\u2019n\u0131n m\u00fc\u015fteri hizmetlerine (destek@thesveltechic.com veya +971 56 850 8810) iletece\u011fini, sorununun \u00e7\u00f6z\u00fcm\u00fc i\u00e7in SATICI\u2019ya makul s\u00fcre (en az 15 i\u015f g\u00fcn\u00fc) tan\u0131yaca\u011f\u0131n\u0131 kabul ve taahh\u00fct eder.</p>' +
+
+      '<h4>MADDE 13 \u2014 CEZA\u0130 \u015eART VE TAZM\u0130NAT</h4>' +
+      '<p>13.1.1. ALICI\u2019n\u0131n, Madde 12 h\u00fck\u00fcmlerini ihlal etmesi halinde, SATICI\u2019n\u0131n u\u011frad\u0131\u011f\u0131 maddi ve manevi zarardan ba\u011f\u0131ms\u0131z olarak, sipari\u015f tutar\u0131n\u0131n 20 (yirmi) kat\u0131 tutar\u0131nda cezai \u015fart \u00f6demeyi kabul ve taahh\u00fct eder.</p>' +
+      '<p>13.1.2. Cezai \u015fart, SATICI\u2019n\u0131n ayr\u0131ca tazminat talep etme hakk\u0131n\u0131 ortadan kald\u0131rmaz.</p>' +
+
+      '<h4>MADDE 14 \u2014 K\u0130\u015e\u0130SEL VER\u0130LER\u0130N KORUNMASI</h4>' +
+      '<p>14.1. SATICI, ALICI\u2019n\u0131n ki\u015fisel verilerini 6698 say\u0131l\u0131 Ki\u015fisel Verilerin Korunmas\u0131 Kanunu (KVKK) ve ilgili mevzuat h\u00fck\u00fcmlerine uygun olarak i\u015fler.</p>' +
+      '<p>14.2. ALICI\u2019n\u0131n ki\u015fisel verilerinin i\u015flenmesine ili\u015fkin detayl\u0131 bilgi, www.thesveltechic.com adresinde yay\u0131nlanan Gizlilik Politikas\u0131 ve KVKK Ayd\u0131nlatma Metni\u2019nde yer almaktad\u0131r.</p>' +
+
+      '<h4>MADDE 15 \u2014 M\u00dcCB\u0130R SEBEP</h4>' +
+      '<p>15.1. Taraflar\u0131n kontrol\u00fcnde olmayan; do\u011fal afet, sava\u015f, ter\u00f6r, salg\u0131n hastal\u0131k, grev, lokavt, h\u00fck\u00fcmet kararlar\u0131, g\u00fcmr\u00fck uygulamalar\u0131, ula\u015f\u0131m aksakl\u0131klar\u0131, enerji kesintisi ve benzeri \u00f6ng\u00f6r\u00fclemez ve \u00f6nlenemez olaylar m\u00fccbir sebep say\u0131l\u0131r.</p>' +
+      '<p>15.2. M\u00fccbir sebep durumunda taraflar\u0131n s\u00f6zle\u015fmeden do\u011fan y\u00fck\u00fcml\u00fclkleri, m\u00fccbir sebebin devam\u0131 s\u00fcresince ask\u0131ya al\u0131n\u0131r. M\u00fccbir sebebin 60 (altm\u0131\u015f) g\u00fcnden fazla s\u00fcrmesi halinde, taraflardan her biri S\u00f6zle\u015fme\u2019yi tazminats\u0131z olarak feshedebilir.</p>' +
+
+      '<h4>MADDE 16 \u2014 UYU\u015eMAZLIK \u00c7\u00d6Z\u00dcM\u00dc</h4>' +
+      '<p>16.1. \u0130\u015fbu S\u00f6zle\u015fme\u2019den do\u011fan uyu\u015fmazl\u0131klarda T\u00fcrk Hukuku uygulan\u0131r.</p>' +
+      '<p>16.2. Uyu\u015fmazl\u0131klar\u0131n \u00e7\u00f6z\u00fcm\u00fcnde \u0130stanbul Mahkemeleri ve \u0130stanbul \u0130cra Daireleri m\u00fcnhas\u0131ran yetkilidir.</p>' +
+      '<p>16.3. ALICI, 6502 say\u0131l\u0131 Kanun\u2019un 68. maddesi kapsam\u0131ndaki parasal s\u0131n\u0131rlar dahilinde T\u00fcketici Hakem Heyetleri\u2019ne, bu s\u0131n\u0131rlar\u0131 a\u015fan uyu\u015fmazl\u0131klarda ise T\u00fcketici Mahkemeleri\u2019ne ba\u015fvurma hakk\u0131na sahiptir.</p>' +
+
+      '<h4>MADDE 17 \u2014 S\u00d6ZLE\u015eMEN\u0130N B\u00dcT\u00dcNL\u00dc\u011e\u00dc VE EKLER\u0130</h4>' +
+      '<p>17.1. \u0130\u015fbu S\u00f6zle\u015fme, a\u015fa\u011f\u0131daki belgelerin tamam\u0131 ile birlikte bir b\u00fct\u00fcn te\u015fkil eder:</p>' +
+      '<p>Ek-1: Kullan\u0131m \u015eartlar\u0131 &bull; Ek-2: \u0130ade ve De\u011fi\u015fim Politikas\u0131 &bull; Ek-3: Kargo Politikas\u0131 &bull; Ek-4: Gizlilik Politikas\u0131 ve KVKK Ayd\u0131nlatma Metni &bull; Ek-5: KVKK A\u00e7\u0131k R\u0131za Metni &bull; Ek-6: \u00c7erez Politikas\u0131</p>' +
+      '<p>17.2. ALICI, sipari\u015f onay sayfas\u0131nda yer alan onay kutucu\u011funu i\u015faretleyerek, i\u015fbu S\u00f6zle\u015fme\u2019yi ve t\u00fcm eklerini okudu\u011funu, anlad\u0131\u011f\u0131n\u0131 ve kabul etti\u011fini elektronik ortamda beyan ve taahh\u00fct eder.</p>' +
+
+      '<h4>MADDE 18 \u2014 Y\u00dcR\u00dcRL\u00dcK</h4>' +
+      '<p>18.1. \u0130\u015fbu S\u00f6zle\u015fme, ALICI taraf\u0131ndan elektronik ortamda onaylanand\u0131\u011f\u0131 tarihte y\u00fcr\u00fcrl\u00fc\u011fe girer.</p>' +
+      '<p>18.2. SATICI, i\u015fbu S\u00f6zle\u015fme\u2019yi tek tarafl\u0131 olarak g\u00fcncelleme hakk\u0131n\u0131 sakl\u0131 tutar.</p>' +
+      '<p>18.3. \u0130\u015fbu S\u00f6zle\u015fme, 18 (on sekiz) maddeden olu\u015fmakta olup, taraflarca okunarak kabul edilmi\u015ftir.</p>' +
+
+      '<hr style="margin:16px 0;">' +
+      '<p><strong>SATICI:</strong> MESU L.L.C-F.Z &mdash; Meydan Grandstand, 6th Floor, Dubai, BAE</p>' +
+      '<p><strong>ALICI:</strong> ' + fullName + ' &mdash; ' + escapeHtml(fullAddress) + '</p>' +
+      '<p><strong>Onay Tarihi:</strong> ' + dateStr + '</p>';
   }
 
   function generateMarketingHtml() {
@@ -523,16 +679,45 @@
       email: val('email') || '___',
       phone: val('phone') || '___'
     };
+    var fullName = escapeHtml(ci.firstName + ' ' + ci.lastName);
     var today = new Date();
     var dateStr = today.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-    return '<h4>TİCARİ ELEKTRONİK İLETİ ONAYI</h4>' +
-      '<p>6563 sayılı Elektronik Ticaretin Düzenlenmesi Hakkında Kanun ve ilgili mevzuat kapsamında;</p>' +
-      '<p><strong>' + escapeHtml(ci.firstName + ' ' + ci.lastName) + '</strong> olarak, <strong>MESU L.L.C-F.Z (Svelte Chic)</strong> tarafından aşağıda belirtilen iletişim kanalları aracılığıyla tarafıma ticari elektronik ileti (kampanya, promosyon, indirim, yeni ürün bildirimi vb.) gönderilmesini kabul ediyorum.</p>' +
-      '<table><tr><td>E-posta</td><td>' + escapeHtml(ci.email) + '</td></tr>' +
-      '<tr><td>Telefon / SMS</td><td>' + escapeHtml(ci.phone) + '</td></tr></table>' +
-      '<p>Bu onayımı istediğim zaman destek@thesveltechic.com adresine e-posta göndererek veya gelen iletilerdeki "abonelikten çık" bağlantısını kullanarak geri çekebileceğimi biliyorum.</p>' +
-      '<p><strong>Onay Tarihi:</strong> ' + dateStr + '</p>';
+    return '<h3 style="text-align:center;margin-bottom:4px;">T\u0130CAR\u0130 ELEKTRON\u0130K \u0130LET\u0130 ONAY METN\u0130</h3>' +
+      '<p style="text-align:center;font-size:11px;color:#888;margin-bottom:16px;">Son G\u00fcncelleme Tarihi: 27 Mart 2026</p>' +
+
+      '<h4>T\u0130CAR\u0130 ELEKTRON\u0130K \u0130LET\u0130 G\u00d6NDER\u0130M\u0130NE \u0130L\u0130\u015eK\u0130N ONAY BEYANI</h4>' +
+      '<p>6563 say\u0131l\u0131 Elektronik Ticaretin D\u00fczenlenmesi Hakk\u0131nda Kanun ve Ticari \u0130leti\u015fim ve Ticari Elektronik \u0130letiler Hakk\u0131nda Y\u00f6netmelik kapsam\u0131nda;</p>' +
+      '<p>MESU L.L.C-F.Z ("Thesveltechic") taraf\u0131ndan;</p>' +
+      '<ul style="margin:8px 0 8px 20px;">' +
+      '<li>Kampanya, indirim ve promosyon duyurular\u0131,</li>' +
+      '<li>Yeni \u00fcr\u00fcn ve koleksiyon tan\u0131t\u0131mlar\u0131,</li>' +
+      '<li>\u00d6zel g\u00fcn kutlamalar\u0131 ve sezonluk kampanya bilgilendirmeleri,</li>' +
+      '<li>Sadakat program\u0131 ve avantajlara ili\u015fkin bilgilendirmeler,</li>' +
+      '<li>Anket ve m\u00fc\u015fteri memnuniyeti ara\u015ft\u0131rmalar\u0131,</li>' +
+      '<li>Etkinlik ve organizasyon duyurular\u0131</li>' +
+      '</ul>' +
+      '<p>konular\u0131nda e-posta, SMS ve/veya telefon arama yoluyla taraf\u0131ma ticari elektronik ileti g\u00f6nderilmesine <strong>ONAY VER\u0130YORUM</strong>.</p>' +
+
+      '<h4>\u00d6NEML\u0130 B\u0130LG\u0130LER</h4>' +
+      '<p><strong>1. Onay Geri Alma Hakk\u0131:</strong> Ticari elektronik ileti alma onay\u0131n\u0131z\u0131, herhangi bir zamanda, hi\u00e7bir gerek\u00e7e g\u00f6stermeksizin ve \u00fccretsiz olarak geri alabilirsiniz.</p>' +
+      '<p><strong>2. Geri Alma Y\u00f6ntemleri:</strong></p>' +
+      '<p>&bull; E-posta: destek@thesveltechic.com adresine "Ticari \u0130leti Onay \u0130ptali" konulu mesaj g\u00f6ndererek</p>' +
+      '<p>&bull; \u0130leti i\u00e7indeki "Abonelikten \u00c7\u0131k" / "Unsubscribe" ba\u011flant\u0131s\u0131na t\u0131klayarak</p>' +
+      '<p>&bull; SMS: "\u0130PTAL" yazarak belirtilen numaraya g\u00f6ndererek</p>' +
+      '<p><strong>3. \u0130\u015flem S\u00fcresi:</strong> Geri alma talebiniz, talebinizin \u0130\u015eLETME\u2019ye ula\u015fmas\u0131ndan itibaren en ge\u00e7 3 (\u00fc\u00e7) i\u015f g\u00fcn\u00fc i\u00e7erisinde i\u015fleme al\u0131n\u0131r.</p>' +
+      '<p><strong>4. Sipari\u015f Bildirimleri:</strong> Ticari elektronik ileti onay\u0131n\u0131z\u0131 geri alman\u0131z, sipari\u015f onay\u0131, kargo bilgilendirmesi, iade/de\u011fi\u015fim s\u00fcreci gibi i\u015flemsel bildirimlerin g\u00f6nderilmesini engellemez.</p>' +
+      '<p><strong>5. Veri Kullan\u0131m\u0131:</strong> \u0130leti\u015fim bilgileriniz, yaln\u0131zca yukar\u0131da belirtilen ama\u00e7larla kullan\u0131l\u0131r. Detayl\u0131 bilgi i\u00e7in Gizlilik Politikas\u0131 ve KVKK Ayd\u0131nlatma Metni\u2019ne bak\u0131n\u0131z.</p>' +
+
+      '<hr style="margin:16px 0;">' +
+      '<p><strong>\u0130lgili Ki\u015fi (M\u00fc\u015fteri) Bilgileri:</strong></p>' +
+      '<table>' +
+      '<tr><td>Ad Soyad</td><td>' + fullName + '</td></tr>' +
+      '<tr><td>E-posta</td><td>' + escapeHtml(ci.email) + '</td></tr>' +
+      '<tr><td>Telefon</td><td>' + escapeHtml(ci.phone) + '</td></tr>' +
+      '<tr><td>Onay Tarihi</td><td>' + dateStr + '</td></tr>' +
+      '</table>' +
+      '<p style="margin-top:12px;font-size:11px;color:#888;">\u0130\u015fbu Ticari Elektronik \u0130leti Onay Metni, 6563 say\u0131l\u0131 Kanun ve ilgili Y\u00f6netmelik h\u00fck\u00fcmlerine uygun olarak haz\u0131rlanm\u0131\u015ft\u0131r.<br>MESU L.L.C-F.Z \u2014 Thesveltechic</p>';
   }
 
 })();
