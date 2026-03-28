@@ -31,7 +31,10 @@ exports.handler = async (event) => {
       return {
         statusCode: 200,
         headers: CORS_HEADERS,
-        body: JSON.stringify({ publishableKey: process.env.STRIPE_PUBLISHABLE_KEY })
+        body: JSON.stringify({
+          publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
+          metaPixelId: process.env.META_PIXEL_ID || ''
+        })
       };
     }
 
@@ -61,8 +64,8 @@ exports.handler = async (event) => {
           name: `${customer.firstName} ${customer.lastName}`,
           phone: customer.phone,
           address: {
-            line1: customer.address,
-            line2: customer.apartment || '',
+            line1: (customer.mahalle ? customer.mahalle + ', ' : '') + customer.address,
+            line2: customer.district || '',
             city: customer.city,
             postal_code: customer.zip,
             country: customer.country || 'TR'
@@ -74,8 +77,8 @@ exports.handler = async (event) => {
           name: `${customer.firstName} ${customer.lastName}`,
           phone: customer.phone,
           address: {
-            line1: customer.address,
-            line2: customer.apartment || '',
+            line1: (customer.mahalle ? customer.mahalle + ', ' : '') + customer.address,
+            line2: customer.district || '',
             city: customer.city,
             postal_code: customer.zip,
             country: customer.country || 'TR'

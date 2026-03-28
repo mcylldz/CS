@@ -19,6 +19,7 @@
   let addressData = null;  // Turkey il/ilçe/mahalle data
   let abandonTimer = null; // 10-min abandoned checkout timer
   let abandonSent = false; // prevent duplicate abandon calls
+  let metaPixelReady = false; // Meta Pixel loaded flag
 
   // ---- URL Params ----
   const params = new URLSearchParams(window.location.search);
@@ -122,6 +123,11 @@
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
+      // Load Meta Pixel if pixel ID is available
+      if (data.metaPixelId) {
+        loadMetaPixel(data.metaPixelId);
+      }
+
       if (data.publishableKey) {
         stripeInstance = Stripe(data.publishableKey);
         var elements = stripeInstance.elements({ locale: 'tr' });
@@ -247,7 +253,65 @@
     });
   }
 
-  // ======== META CAPI TRACKING ========
+  // ======== META PIXEL + CAPI TRACKING ========
+
+  // Load Meta Pixel base code dynamically
+  function loadMetaPixel(pixelId) {
+    if (metaPixelReady || !pixelId) return;
+    !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+    n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+    n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+    t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
+    document,'script','https://connect.facebook.net/en_US/fbevents.js');
+    fbq('init', pixelId);
+    // PageView on init
+    fbq('track', 'PageView');
+    metaPixelReady = true;
+    console.log('Meta Pixel loaded:', pixelId);
+
+    // If cart already parsed, fire deferred InitiateCheckout via pixel
+    if (cartItems.length > 0 && window._deferredICEventId) {
+      fireFbqEvent('InitiateCheckout', window._deferredICEventId, null);
+      window._deferredICEventId = null;
+    }
+  }
+
+  // Build fbq custom_data for events
+  function buildFbqCustomData() {
+    var total = subtotal - discountAmount;
+    var data = {
+      currency: 'TRY',
+      value: parseFloat((total / 100).toFixed(2)),
+      content_type: 'product',
+      num_items: cartItems.reduce(function(sum, item) { return sum + item.quantity; }, 0)
+    };
+    if (cartItems.length > 0) {
+      data.contents = cartItems.map(function(item) {
+        return {
+          id: item.sku || String(item.variant_id),
+          quantity: item.quantity,
+          item_price: parseFloat((item.price / 100).toFixed(2))
+        };
+      });
+      data.content_ids = cartItems.map(function(item) {
+        return item.sku || String(item.variant_id);
+      });
+    }
+    return data;
+  }
+
+  // Fire fbq browser event with eventID for deduplication
+  function fireFbqEvent(eventName, eventId, customer) {
+    if (!metaPixelReady || typeof fbq === 'undefined') return;
+    var customData = buildFbqCustomData();
+    // Add customer data if available
+    if (customer && customer.email) {
+      customData.customer_email = customer.email;
+    }
+    fbq('track', eventName, customData, { eventID: eventId });
+    console.log('Meta Pixel [' + eventName + '] eventID:', eventId);
+  }
+
   function getTrackingBase() {
     return {
       items: cartItems.map(function(i) {
@@ -294,12 +358,24 @@
     };
   }
 
+  // Fire event via BOTH browser pixel AND server-side CAPI with same eventId
   function fireMetaEvent(eventName, customer) {
     var payload = getTrackingBase();
     payload.eventName = eventName;
-    payload.eventId = eventName.toLowerCase() + '_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+    // Generate shared eventId for deduplication
+    var eventId = eventName.toLowerCase() + '_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+    payload.eventId = eventId;
     if (customer) payload.customer = customer;
 
+    // 1) Browser-side: fbq pixel event
+    if (metaPixelReady) {
+      fireFbqEvent(eventName, eventId, customer);
+    } else if (eventName === 'InitiateCheckout') {
+      // Pixel not yet loaded, defer the fbq call
+      window._deferredICEventId = eventId;
+    }
+
+    // 2) Server-side: CAPI event (same eventId for deduplication)
     fetch('/api/track-event', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -314,7 +390,6 @@
   // Fire InitiateCheckout on page load (after cart parse)
   function fireInitiateCheckout() {
     if (cartItems.length === 0) return;
-    // No customer data yet at this stage
     fireMetaEvent('InitiateCheckout', null);
   }
 
@@ -668,6 +743,15 @@
         clearAbandonTimer();
         abandonSent = true;
 
+        // Browser-side Purchase event (CAPI fires from complete-order, uses same eventId pattern for dedup)
+        var purchaseEventId = 'purchase_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+        if (metaPixelReady && typeof fbq !== 'undefined') {
+          var purchaseData = buildFbqCustomData();
+          purchaseData.transaction_id = paymentIntent.id;
+          fbq('track', 'Purchase', purchaseData, { eventID: purchaseEventId });
+          console.log('Meta Pixel [Purchase] eventID:', purchaseEventId);
+        }
+
         // Step 3: Complete order (Shopify + Meta CAPI)
         const orderResp = await fetch('/api/complete-order', {
           method: 'POST',
@@ -684,6 +768,7 @@
             // Meta & tracking
             fbp: fbp,
             fbc: fbc,
+            purchaseEventId: purchaseEventId,
             utm_source: utmSource,
             utm_medium: utmMedium,
             utm_campaign: utmCampaign,

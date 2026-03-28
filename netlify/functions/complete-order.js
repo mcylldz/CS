@@ -46,7 +46,7 @@ exports.handler = async (event) => {
       discountAmount,
       couponCode,
       total,
-      fbp, fbc,
+      fbp, fbc, purchaseEventId,
       utm_source, utm_medium, utm_campaign, utm_term, utm_content,
       userAgent, sourceUrl,
       agreementHtml, marketingConsent
@@ -231,7 +231,8 @@ exports.handler = async (event) => {
     // =============================================
     try {
       const eventTime = Math.floor(Date.now() / 1000);
-      const eventId = `purchase_${shopifyOrder.id}_${eventTime}`;
+      // Use the same eventId from browser pixel for deduplication
+      const eventId = purchaseEventId || `purchase_${shopifyOrder.id}_${eventTime}`;
 
       const metaPayload = {
         data: [{
