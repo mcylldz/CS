@@ -23,8 +23,15 @@
 
   // ---- URL Params ----
   const params = new URLSearchParams(window.location.search);
-  const fbp = params.get('fbp') || '';
-  const fbc = params.get('fbc') || '';
+
+  // Read fbp/fbc from cookies first, fallback to URL params
+  function getCookie(name) {
+    var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    return match ? decodeURIComponent(match[2]) : '';
+  }
+  const fbp = getCookie('_fbp') || params.get('fbp') || '';
+  var fbclid = params.get('fbclid') || '';
+  const fbc = getCookie('_fbc') || params.get('fbc') || (fbclid ? ('fb.1.' + Date.now() + '.' + fbclid) : '');
   const utmSource = params.get('utm_source') || '';
   const utmMedium = params.get('utm_medium') || '';
   const utmCampaign = params.get('utm_campaign') || '';
@@ -263,7 +270,32 @@
     n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
     t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
     document,'script','https://connect.facebook.net/en_US/fbevents.js');
-    fbq('init', pixelId);
+
+    // Advanced Matching: pass available user data at init
+    // This improves event match quality even before the user fills the form
+    var advancedMatchData = {};
+    if (fbp) advancedMatchData.fbp = fbp;
+    if (fbc) advancedMatchData.fbc = fbc;
+    // Check if any fields are pre-filled (e.g. returning user)
+    var emailVal = val('email');
+    var phoneVal = val('phone');
+    var fnVal = val('firstName');
+    var lnVal = val('lastName');
+    if (emailVal) advancedMatchData.em = emailVal.toLowerCase().trim();
+    if (phoneVal) advancedMatchData.ph = phoneVal.replace(/\D/g, '');
+    if (fnVal) advancedMatchData.fn = fnVal.toLowerCase().trim();
+    if (lnVal) advancedMatchData.ln = lnVal.toLowerCase().trim();
+
+    window._metaPixelId = pixelId; // Store for re-init with user data later
+
+    if (Object.keys(advancedMatchData).length > 0) {
+      fbq('init', pixelId, advancedMatchData);
+      console.log('Meta Pixel init with Advanced Matching:', Object.keys(advancedMatchData));
+    } else {
+      fbq('init', pixelId);
+      console.log('Meta Pixel init (no Advanced Matching data available)');
+    }
+
     // PageView on init
     fbq('track', 'PageView');
     metaPixelReady = true;
@@ -274,6 +306,29 @@
       fireFbqEvent('InitiateCheckout', window._deferredICEventId, null);
       window._deferredICEventId = null;
     }
+  }
+
+  // Re-init pixel with user data when they complete Step 1 (for better matching on Step 2 events)
+  function updatePixelUserData(customer) {
+    if (!metaPixelReady || typeof fbq === 'undefined') return;
+    var userData = {};
+    if (customer.email) userData.em = customer.email.toLowerCase().trim();
+    if (customer.phone) userData.ph = customer.phone.replace(/\D/g, '');
+    if (customer.firstName) userData.fn = customer.firstName.toLowerCase().trim();
+    if (customer.lastName) userData.ln = customer.lastName.toLowerCase().trim();
+    if (customer.city) userData.ct = customer.city.toLowerCase().trim();
+    if (customer.zip) userData.zp = customer.zip.trim();
+    if (customer.country) userData.country = customer.country.toLowerCase().trim();
+    if (fbp) userData.fbp = fbp;
+    if (fbc) userData.fbc = fbc;
+    // Use fbq('init') again with user data to update matching for subsequent events
+    fbq('init', window._metaPixelId || '', userData);
+    console.log('Meta Pixel Advanced Matching updated with customer data');
+  }
+
+  // Build catalog-compatible content_id: shopify_TR_{product_id}_{variant_id}
+  function getCatalogId(item) {
+    return 'shopify_TR_' + item.product_id + '_' + item.variant_id;
   }
 
   // Build fbq custom_data for events
@@ -288,13 +343,13 @@
     if (cartItems.length > 0) {
       data.contents = cartItems.map(function(item) {
         return {
-          id: item.sku || String(item.variant_id),
+          id: getCatalogId(item),
           quantity: item.quantity,
           item_price: parseFloat((item.price / 100).toFixed(2))
         };
       });
       data.content_ids = cartItems.map(function(item) {
-        return item.sku || String(item.variant_id);
+        return getCatalogId(item);
       });
     }
     return data;
@@ -397,6 +452,8 @@
   function fireAddPaymentInfo() {
     if (cartItems.length === 0) return;
     var customer = getCustomerData();
+    // Update pixel with customer data for better Advanced Matching on this and future events
+    updatePixelUserData(customer);
     fireMetaEvent('AddPaymentInfo', customer);
   }
 
@@ -790,7 +847,8 @@
         const successParams = new URLSearchParams({
           order: orderData.shopifyOrderName || '',
           email: customerInfo.email,
-          total: formatMoney(subtotal - discountAmount)
+          total: formatMoney(subtotal - discountAmount),
+          agreement: orderData.agreementUrl || ''
         });
         window.location.href = '/success.html?' + successParams.toString();
 

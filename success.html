@@ -133,10 +133,16 @@
       </div>
     </div>
 
+    <div id="agreementLinkWrap" style="display:none; margin-bottom:24px;">
+      <a id="agreementLink" href="#" target="_blank" style="display:inline-block; padding:12px 28px; font-size:13px; font-weight:500; color:#b5a07c; border:1px solid #b5a07c; border-radius:6px; text-decoration:none; transition:all 0.2s; font-family:'Inter',sans-serif;">
+        Mesafeli Satış Sözleşmesini Görüntüle
+      </a>
+    </div>
+
     <a href="https://www.thesveltechic.com" class="sc-success-btn">Alışverişe Devam Et</a>
 
     <p class="sc-success-note">
-      Sorularınız için <a href="mailto:info@thesveltechic.com" style="color:#b5a07c;">info@thesveltechic.com</a> adresinden bize ulaşabilirsiniz.
+      Sorularınız için <a href="mailto:destek@thesveltechic.com" style="color:#b5a07c;">destek@thesveltechic.com</a> adresinden bize ulaşabilirsiniz.
     </p>
   </div>
 
@@ -146,6 +152,13 @@
       document.getElementById('orderNumber').textContent = p.get('order') || '—';
       document.getElementById('orderEmail').textContent = p.get('email') || '—';
       document.getElementById('orderTotal').textContent = p.get('total') || '—';
+
+      // Show agreement link if available
+      var agreementUrl = p.get('agreement');
+      if (agreementUrl) {
+        document.getElementById('agreementLink').href = agreementUrl;
+        document.getElementById('agreementLinkWrap').style.display = 'block';
+      }
     })();
   </script>
 </body>

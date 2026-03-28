@@ -147,6 +147,31 @@ exports.handler = async (event) => {
     if (stripeCustomerId) noteAttributes.push({ name: 'stripe_customer_id', value: stripeCustomerId });
     if (marketingConsent) noteAttributes.push({ name: 'marketing_consent', value: 'true' });
 
+    // Add agreement info as note_attributes for Shopify email template access
+    if (agreementHtml) {
+      noteAttributes.push({ name: 'mesafeli_satis_sozlesmesi', value: 'onaylandi' });
+      // Agreement URL will be added after we know the order name
+    }
+
+    // Build metafields array for atomic creation with the order
+    const orderMetafields = [];
+    if (agreementHtml) {
+      orderMetafields.push({
+        namespace: 'checkout',
+        key: 'mesafeli_satis_sozlesmesi',
+        value: agreementHtml,
+        type: 'multi_line_text_field'
+      });
+    }
+    if (marketingConsent) {
+      orderMetafields.push({
+        namespace: 'checkout',
+        key: 'marketing_consent',
+        value: 'true',
+        type: 'single_line_text_field'
+      });
+    }
+
     const orderPayload = {
       order: {
         customer: { id: shopifyCustomerId },
@@ -157,9 +182,10 @@ exports.handler = async (event) => {
         fulfillment_status: null,
         send_receipt: true,
         send_fulfillment_receipt: true,
-        note: `Custom checkout | Stripe PI: ${paymentIntentId}\n\n--- MESAFELİ SATIŞ SÖZLEŞMESİ ---\nSözleşme elektronik ortamda onaylanmıştır. Detaylar sipariş notu olarak eklenmiştir.`,
+        note: `Custom checkout | Stripe PI: ${paymentIntentId}\n\n--- MESAFELİ SATIŞ SÖZLEŞMESİ ---\nSözleşme elektronik ortamda onaylanmıştır.`,
         note_attributes: noteAttributes,
         tags: 'custom-checkout, stripe',
+        metafields: orderMetafields,
         shipping_address: {
           first_name: customer.firstName,
           last_name: customer.lastName,
@@ -210,8 +236,27 @@ exports.handler = async (event) => {
 
     console.log(`Shopify order created: ${shopifyOrder.name} (ID: ${shopifyOrder.id})`);
 
-    // Save agreement as order metafield
+    // Update order with agreement URL in note_attributes (for Shopify email templates)
     if (agreementHtml) {
+      const agreementLink = `https://checkout.thesveltechic.com/api/get-agreement?order=${encodeURIComponent(shopifyOrder.name)}&email=${encodeURIComponent(customer.email)}`;
+      try {
+        const existingAttrs = shopifyOrder.note_attributes || [];
+        existingAttrs.push({ name: 'sozlesme_linki', value: agreementLink });
+        await shopifyRequest(`orders/${shopifyOrder.id}.json`, 'PUT', {
+          order: {
+            id: shopifyOrder.id,
+            note_attributes: existingAttrs
+          }
+        });
+        console.log('Agreement URL added to order note_attributes');
+      } catch (noteErr) {
+        console.error('Failed to add agreement URL to note_attributes:', noteErr.message);
+      }
+    }
+
+    // Agreement metafield is now saved atomically with order creation (via metafields array above)
+    // If it fails, try the separate API call as fallback
+    if (agreementHtml && (!shopifyOrder.metafields || shopifyOrder.metafields.length === 0)) {
       try {
         await shopifyRequest(`orders/${shopifyOrder.id}/metafields.json`, 'POST', {
           metafield: {
@@ -221,8 +266,23 @@ exports.handler = async (event) => {
             type: 'multi_line_text_field'
           }
         });
+        console.log('Agreement metafield saved via fallback API call');
       } catch (mfErr) {
-        console.warn('Agreement metafield save warning:', mfErr.message);
+        console.error('Agreement metafield FALLBACK also failed:', mfErr.message);
+        // Last resort: try with json type
+        try {
+          await shopifyRequest(`orders/${shopifyOrder.id}/metafields.json`, 'POST', {
+            metafield: {
+              namespace: 'checkout',
+              key: 'mesafeli_satis_sozlesmesi',
+              value: JSON.stringify({ html: agreementHtml, timestamp: new Date().toISOString() }),
+              type: 'json'
+            }
+          });
+          console.log('Agreement metafield saved via JSON fallback');
+        } catch (jsonErr) {
+          console.error('Agreement metafield JSON fallback also failed:', jsonErr.message);
+        }
       }
     }
 
@@ -261,11 +321,11 @@ exports.handler = async (event) => {
             value: parseFloat((total / 100).toFixed(2)),
             content_type: 'product',
             contents: items.map(item => ({
-              id: item.sku || String(item.variant_id),
+              id: `shopify_TR_${item.product_id}_${item.variant_id}`,
               quantity: item.quantity,
               item_price: parseFloat((item.price / 100).toFixed(2))
             })),
-            content_ids: items.map(item => item.sku || String(item.variant_id)),
+            content_ids: items.map(item => `shopify_TR_${item.product_id}_${item.variant_id}`),
             num_items: items.reduce((sum, item) => sum + item.quantity, 0),
             order_id: shopifyOrder.name
           }
@@ -297,6 +357,9 @@ exports.handler = async (event) => {
     // =============================================
     // RESPONSE
     // =============================================
+    // Build agreement URL for customer access
+    const agreementUrl = `https://checkout.thesveltechic.com/api/get-agreement?order=${encodeURIComponent(shopifyOrder.name)}&email=${encodeURIComponent(customer.email)}`;
+
     return {
       statusCode: 200,
       headers: CORS_HEADERS,
@@ -304,7 +367,8 @@ exports.handler = async (event) => {
         success: true,
         shopifyOrderId: shopifyOrder.id,
         shopifyOrderName: shopifyOrder.name,
-        shopifyCustomerId: shopifyCustomerId
+        shopifyCustomerId: shopifyCustomerId,
+        agreementUrl: agreementUrl
       })
     };
 
