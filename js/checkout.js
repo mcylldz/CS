@@ -11,9 +11,14 @@
   let discountAmount = 0;  // in kuruş
   let appliedCoupon = null;
   let stripeInstance = null;
-  let cardElement = null;
+  let cardNumberElement = null;
+  let cardExpiryElement = null;
+  let cardCvcElement = null;
   let isProcessing = false;
   let currentStep = 1;
+  let addressData = null;  // Turkey il/ilçe/mahalle data
+  let abandonTimer = null; // 10-min abandoned checkout timer
+  let abandonSent = false; // prevent duplicate abandon calls
 
   // ---- URL Params ----
   const params = new URLSearchParams(window.location.search);
@@ -33,7 +38,10 @@
     renderItems();
     updateTotals();
     initStripe();
+    loadAddressData();
     bindEvents();
+    // Meta CAPI: InitiateCheckout on page load
+    fireInitiateCheckout();
   }
 
   // ---- Parse Cart from URL ----
@@ -105,36 +113,44 @@
     }
   }
 
-  // ---- Stripe Init ----
+  // ---- Stripe Init (Separate Fields) ----
   function initStripe() {
     fetch('/api/create-payment', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'get_key' })
     })
-    .then(r => r.json())
-    .then(data => {
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
       if (data.publishableKey) {
         stripeInstance = Stripe(data.publishableKey);
-        const elements = stripeInstance.elements({
-          locale: 'tr'
-        });
-        cardElement = elements.create('card', {
-          style: {
-            base: {
-              fontFamily: "'Inter', sans-serif",
-              fontSize: '15px',
-              color: '#333',
-              '::placeholder': { color: '#999' }
-            },
-            invalid: { color: '#c00' }
-          },
-          hidePostalCode: true
-        });
-        cardElement.mount('#card-element');
+        var elements = stripeInstance.elements({ locale: 'tr' });
 
-        cardElement.on('change', function (event) {
-          const errEl = document.getElementById('card-errors');
+        var fieldStyle = {
+          base: {
+            fontFamily: "'Inter', sans-serif",
+            fontSize: '15px',
+            color: '#333',
+            '::placeholder': { color: '#999' }
+          },
+          invalid: { color: '#c00' }
+        };
+
+        // Card Number
+        cardNumberElement = elements.create('cardNumber', { style: fieldStyle, showIcon: true });
+        cardNumberElement.mount('#card-number-element');
+
+        // Expiry
+        cardExpiryElement = elements.create('cardExpiry', { style: fieldStyle });
+        cardExpiryElement.mount('#card-expiry-element');
+
+        // CVC
+        cardCvcElement = elements.create('cardCvc', { style: fieldStyle });
+        cardCvcElement.mount('#card-cvc-element');
+
+        // Error handling for all fields
+        var errEl = document.getElementById('card-errors');
+        function handleCardError(event) {
           if (event.error) {
             errEl.textContent = event.error.message;
             errEl.style.display = 'block';
@@ -142,15 +158,225 @@
             errEl.textContent = '';
             errEl.style.display = 'none';
           }
-        });
+        }
+        cardNumberElement.on('change', handleCardError);
+        cardExpiryElement.on('change', handleCardError);
+        cardCvcElement.on('change', handleCardError);
 
-        // Enable submit button once Stripe is ready
+        // Enable submit button
         document.getElementById('submitBtn').disabled = false;
       }
     })
-    .catch(err => {
+    .catch(function(err) {
       console.error('Stripe init error:', err);
       showGlobalError('Ödeme sistemi yüklenemedi. Lütfen sayfayı yenileyin.');
+    });
+  }
+
+  // ---- Load Address Data ----
+  function loadAddressData() {
+    fetch('/data/adresler.json')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        addressData = data;
+        populateProvinces();
+      })
+      .catch(function(err) {
+        console.error('Address data load error:', err);
+      });
+  }
+
+  function populateProvinces() {
+    var citySelect = document.getElementById('city');
+    if (!addressData || !citySelect) return;
+
+    // Sort provinces alphabetically in Turkish
+    var provinces = Object.keys(addressData).sort(function(a, b) {
+      return a.localeCompare(b, 'tr');
+    });
+
+    citySelect.innerHTML = '<option value="">İl seçiniz</option>';
+    provinces.forEach(function(il) {
+      var opt = document.createElement('option');
+      opt.value = il;
+      opt.textContent = il;
+      citySelect.appendChild(opt);
+    });
+  }
+
+  function populateDistricts(il) {
+    var districtSelect = document.getElementById('district');
+    var mahalleSelect = document.getElementById('mahalle');
+
+    // Reset district and mahalle
+    districtSelect.innerHTML = '<option value="">İlçe seçiniz</option>';
+    districtSelect.disabled = false;
+    mahalleSelect.innerHTML = '<option value="">Önce ilçe seçiniz</option>';
+    mahalleSelect.disabled = true;
+
+    if (!il || !addressData || !addressData[il]) return;
+
+    var districts = Object.keys(addressData[il]).sort(function(a, b) {
+      return a.localeCompare(b, 'tr');
+    });
+
+    districts.forEach(function(ilce) {
+      var opt = document.createElement('option');
+      opt.value = ilce;
+      opt.textContent = ilce;
+      districtSelect.appendChild(opt);
+    });
+  }
+
+  function populateMahalleler(il, ilce) {
+    var mahalleSelect = document.getElementById('mahalle');
+    mahalleSelect.innerHTML = '<option value="">Mahalle seçiniz</option>';
+    mahalleSelect.disabled = false;
+
+    if (!il || !ilce || !addressData || !addressData[il] || !addressData[il][ilce]) return;
+
+    var mahalleler = addressData[il][ilce].slice().sort(function(a, b) {
+      return a.localeCompare(b, 'tr');
+    });
+
+    mahalleler.forEach(function(mah) {
+      var opt = document.createElement('option');
+      opt.value = mah;
+      opt.textContent = mah;
+      mahalleSelect.appendChild(opt);
+    });
+  }
+
+  // ======== META CAPI TRACKING ========
+  function getTrackingBase() {
+    return {
+      items: cartItems.map(function(i) {
+        return {
+          variant_id: i.variant_id,
+          product_id: i.product_id,
+          sku: i.sku,
+          title: i.title,
+          quantity: i.quantity,
+          price: i.price,
+          line_price: i.line_price
+        };
+      }),
+      subtotal: subtotal,
+      discountAmount: discountAmount,
+      total: subtotal - discountAmount,
+      fbp: fbp,
+      fbc: fbc,
+      utm_source: utmSource,
+      utm_medium: utmMedium,
+      utm_campaign: utmCampaign,
+      utm_term: utmTerm,
+      utm_content: utmContent,
+      userAgent: navigator.userAgent,
+      sourceUrl: window.location.href
+    };
+  }
+
+  function getCustomerData() {
+    var cityEl = document.getElementById('city');
+    var districtEl = document.getElementById('district');
+    var mahalleEl = document.getElementById('mahalle');
+    return {
+      email: val('email'),
+      phone: val('phone'),
+      firstName: val('firstName'),
+      lastName: val('lastName'),
+      address: val('address'),
+      mahalle: (mahalleEl && mahalleEl.selectedOptions[0] ? mahalleEl.selectedOptions[0].text : '') || '',
+      district: (districtEl && districtEl.selectedOptions[0] ? districtEl.selectedOptions[0].text : '') || '',
+      city: (cityEl && cityEl.selectedOptions[0] ? cityEl.selectedOptions[0].text : '') || '',
+      zip: val('zip'),
+      country: val('country') || 'TR'
+    };
+  }
+
+  function fireMetaEvent(eventName, customer) {
+    var payload = getTrackingBase();
+    payload.eventName = eventName;
+    payload.eventId = eventName.toLowerCase() + '_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+    if (customer) payload.customer = customer;
+
+    fetch('/api/track-event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      console.log('Meta CAPI [' + eventName + ']:', d);
+    }).catch(function(err) {
+      console.warn('Meta CAPI [' + eventName + '] error:', err);
+    });
+  }
+
+  // Fire InitiateCheckout on page load (after cart parse)
+  function fireInitiateCheckout() {
+    if (cartItems.length === 0) return;
+    // No customer data yet at this stage
+    fireMetaEvent('InitiateCheckout', null);
+  }
+
+  // Fire AddPaymentInfo when user enters Step 2
+  function fireAddPaymentInfo() {
+    if (cartItems.length === 0) return;
+    var customer = getCustomerData();
+    fireMetaEvent('AddPaymentInfo', customer);
+  }
+
+  // ======== ABANDONED CHECKOUT ========
+  function startAbandonTimer() {
+    clearAbandonTimer();
+    if (abandonSent) return;
+
+    abandonTimer = setTimeout(function() {
+      if (isProcessing || abandonSent) return;
+      sendAbandonedCheckout();
+    }, 10 * 60 * 1000); // 10 minutes
+  }
+
+  function clearAbandonTimer() {
+    if (abandonTimer) {
+      clearTimeout(abandonTimer);
+      abandonTimer = null;
+    }
+  }
+
+  function sendAbandonedCheckout() {
+    if (abandonSent) return;
+    abandonSent = true;
+
+    var customer = getCustomerData();
+    if (!customer.email) return; // Can't create without email
+
+    var payload = {
+      customer: customer,
+      items: cartItems.map(function(i) {
+        return {
+          variant_id: i.variant_id,
+          product_id: i.product_id,
+          sku: i.sku,
+          title: i.title,
+          quantity: i.quantity,
+          price: i.price,
+          line_price: i.line_price
+        };
+      }),
+      subtotal: subtotal,
+      discountAmount: discountAmount,
+      couponCode: appliedCoupon,
+      abandonedAt: new Date().toISOString()
+    };
+
+    fetch('/api/abandoned-checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      console.log('Abandoned checkout sent:', d);
+    }).catch(function(err) {
+      console.warn('Abandoned checkout error:', err);
     });
   }
 
@@ -188,10 +414,16 @@
     }
     hideGlobalError();
     goToStep(2);
+
+    // Meta CAPI: AddPaymentInfo when entering payment step
+    fireAddPaymentInfo();
+
+    // Start 10-minute abandon timer
+    startAbandonTimer();
   }
 
   function validateStep1() {
-    var fields = ['email', 'phone', 'firstName', 'lastName', 'address', 'city', 'district', 'zip'];
+    var fields = ['email', 'phone', 'firstName', 'lastName', 'city', 'district', 'mahalle', 'address'];
     var allValid = true;
     fields.forEach(function(id) {
       var el = document.getElementById(id);
@@ -220,7 +452,7 @@
 
     // Step navigation
     document.getElementById('continueBtn').addEventListener('click', handleContinue);
-    document.getElementById('backBtn').addEventListener('click', function() { goToStep(1); });
+    document.getElementById('backBtn').addEventListener('click', function() { clearAbandonTimer(); goToStep(1); });
 
     // Breadcrumb step clicks
     document.getElementById('stepLabel1').addEventListener('click', function() {
@@ -230,7 +462,18 @@
       if (validateStep1()) {
         hideGlobalError();
         goToStep(2);
+        fireAddPaymentInfo();
+        startAbandonTimer();
       }
+    });
+
+    // Address cascade selects
+    document.getElementById('city').addEventListener('change', function() {
+      populateDistricts(this.value);
+    });
+    document.getElementById('district').addEventListener('change', function() {
+      var il = document.getElementById('city').value;
+      populateMahalleler(il, this.value);
     });
 
     // Submit
@@ -311,6 +554,7 @@
 
   // ---- Form Validation ----
   function validateField(el) {
+    if (!el) return true;
     if (el.required && !el.value.trim()) {
       el.classList.add('sc-error');
       return false;
@@ -352,15 +596,19 @@
     setLoading(true);
     hideGlobalError();
 
+    var cityText = document.getElementById('city').selectedOptions[0]?.text || val('city');
+    var districtText = document.getElementById('district').selectedOptions[0]?.text || val('district');
+    var mahalleText = document.getElementById('mahalle').selectedOptions[0]?.text || val('mahalle');
+
     const customerInfo = {
       email: val('email'),
       phone: val('phone'),
       firstName: val('firstName'),
       lastName: val('lastName'),
       address: val('address'),
-      apartment: val('apartment'),
-      city: val('city'),
-      district: val('district'),
+      mahalle: mahalleText,
+      district: districtText,
+      city: cityText,
       zip: val('zip'),
       country: val('country')
     };
@@ -389,20 +637,21 @@
       if (piData.error) throw new Error(piData.error);
 
       // Step 2: Confirm payment with Stripe Elements
+      var fullStripeAddress = customerInfo.mahalle + ', ' + customerInfo.address;
       const { error, paymentIntent } = await stripeInstance.confirmCardPayment(
         piData.clientSecret,
         {
           payment_method: {
-            card: cardElement,
+            card: cardNumberElement,
             billing_details: {
               name: customerInfo.firstName + ' ' + customerInfo.lastName,
               email: customerInfo.email,
               phone: customerInfo.phone,
               address: {
-                line1: customerInfo.address,
-                line2: customerInfo.apartment,
+                line1: fullStripeAddress,
+                line2: customerInfo.district,
                 city: customerInfo.city,
-                postal_code: customerInfo.zip,
+                postal_code: customerInfo.zip || '',
                 country: customerInfo.country
               }
             }
@@ -415,6 +664,10 @@
       }
 
       if (paymentIntent.status === 'succeeded') {
+        // Payment successful — cancel abandon timer
+        clearAbandonTimer();
+        abandonSent = true;
+
         // Step 3: Complete order (Shopify + Meta CAPI)
         const orderResp = await fetch('/api/complete-order', {
           method: 'POST',
@@ -507,18 +760,21 @@
 
   // ---- Agreement Text Generators ----
   function generateAgreementHtml() {
+    var cityEl = document.getElementById('city');
+    var districtEl = document.getElementById('district');
+    var mahalleEl = document.getElementById('mahalle');
     var ci = {
       firstName: val('firstName') || '___',
       lastName: val('lastName') || '___',
       email: val('email') || '___',
       phone: val('phone') || '___',
       address: val('address') || '___',
-      apartment: val('apartment') || '',
-      city: val('city') || '___',
-      district: val('district') || '___',
-      zip: val('zip') || '___'
+      mahalle: (mahalleEl && mahalleEl.selectedOptions[0] ? mahalleEl.selectedOptions[0].text : '') || '___',
+      city: (cityEl && cityEl.selectedOptions[0] ? cityEl.selectedOptions[0].text : '') || '___',
+      district: (districtEl && districtEl.selectedOptions[0] ? districtEl.selectedOptions[0].text : '') || '___',
+      zip: val('zip') || ''
     };
-    var fullAddress = ci.address + (ci.apartment ? ', ' + ci.apartment : '') + ', ' + ci.district + ', ' + ci.city + ' ' + ci.zip;
+    var fullAddress = ci.mahalle + ', ' + ci.address + ', ' + ci.district + ', ' + ci.city + (ci.zip ? ' ' + ci.zip : '');
     var fullName = escapeHtml(ci.firstName + ' ' + ci.lastName);
     var today = new Date();
     var dateStr = today.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });

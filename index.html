@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Ödeme – Svelte Chic</title>
   <link rel="stylesheet" href="/css/checkout.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -59,36 +59,51 @@
                 <label for="lastName" class="sc-label">Soyad</label>
               </div>
             </div>
-            <div class="sc-field">
-              <input type="text" id="address" class="sc-input" placeholder=" " required autocomplete="street-address">
-              <label for="address" class="sc-label">Adres</label>
-            </div>
-            <div class="sc-field">
-              <input type="text" id="apartment" class="sc-input" placeholder=" " autocomplete="address-line2">
-              <label for="apartment" class="sc-label">Apartman, daire vb. (opsiyonel)</label>
-            </div>
-            <div class="sc-row">
-              <div class="sc-field sc-third">
-                <input type="text" id="city" class="sc-input" placeholder=" " required autocomplete="address-level2">
-                <label for="city" class="sc-label">Şehir</label>
-              </div>
-              <div class="sc-field sc-third">
-                <input type="text" id="district" class="sc-input" placeholder=" " required>
-                <label for="district" class="sc-label">İlçe</label>
-              </div>
-              <div class="sc-field sc-third">
-                <input type="text" id="zip" class="sc-input" placeholder=" " required autocomplete="postal-code">
-                <label for="zip" class="sc-label">Posta Kodu</label>
-              </div>
-            </div>
+
+            <!-- İl (Province) -->
             <div class="sc-field">
               <div class="sc-select-wrap">
-                <select id="country" class="sc-input sc-select" required>
-                  <option value="TR" selected>Türkiye</option>
+                <select id="city" class="sc-input sc-select" required>
+                  <option value="">İl seçiniz</option>
                 </select>
-                <label for="country" class="sc-label sc-label-select">Ülke</label>
+                <label for="city" class="sc-label sc-label-select">İl</label>
               </div>
             </div>
+
+            <!-- İlçe (District) -->
+            <div class="sc-field">
+              <div class="sc-select-wrap">
+                <select id="district" class="sc-input sc-select" required disabled>
+                  <option value="">Önce il seçiniz</option>
+                </select>
+                <label for="district" class="sc-label sc-label-select">İlçe</label>
+              </div>
+            </div>
+
+            <!-- Mahalle (Neighborhood) -->
+            <div class="sc-field">
+              <div class="sc-select-wrap">
+                <select id="mahalle" class="sc-input sc-select" required disabled>
+                  <option value="">Önce ilçe seçiniz</option>
+                </select>
+                <label for="mahalle" class="sc-label sc-label-select">Mahalle</label>
+              </div>
+            </div>
+
+            <!-- Street Address -->
+            <div class="sc-field">
+              <input type="text" id="address" class="sc-input" placeholder=" " required>
+              <label for="address" class="sc-label">Cadde / Sokak, Apartman, Daire No</label>
+            </div>
+
+            <!-- Posta Kodu -->
+            <div class="sc-field">
+              <input type="text" id="zip" class="sc-input" placeholder=" " autocomplete="postal-code">
+              <label for="zip" class="sc-label">Posta Kodu (opsiyonel)</label>
+            </div>
+
+            <!-- Ülke (hidden, fixed TR) -->
+            <input type="hidden" id="country" value="TR">
           </section>
 
           <!-- Shipping Method -->
@@ -128,10 +143,28 @@
                 <span>Kredi / Banka Kartı</span>
                 <div class="sc-card-icons">
                   <svg viewBox="0 0 780 500" class="sc-visa-icon" xmlns="http://www.w3.org/2000/svg"><path d="M293.2 348.7l33.4-195.8h53.3l-33.4 195.8zM540.7 157.4c-10.5-4-27-8.4-47.6-8.4-52.5 0-89.5 26.5-89.8 64.4-.3 28.1 26.4 43.7 46.6 53.1 20.7 9.6 27.7 15.7 27.6 24.3-.1 13.1-16.5 19.1-31.8 19.1-21.3 0-32.6-3-50.1-10.2l-6.9-3.1-7.5 43.8c12.4 5.5 35.4 10.2 59.3 10.5 55.9 0 92.2-26.2 92.5-66.7.2-22.2-14-39.1-44.6-53-18.6-9-30-15-29.9-24.2 0-8.1 9.6-16.8 30.4-16.8 17.4-.3 30 3.5 39.8 7.5l4.8 2.2 7.2-42.3zM666.5 152.9h-41c-12.7 0-22.2 3.5-27.8 16.1l-78.8 178.9h55.8s9.1-24 11.2-29.3l68.1.1c1.6 6.8 6.5 29.2 6.5 29.2h49.3l-43.3-195zm-65.5 125.8c4.4-11.2 21.2-54.5 21.2-54.5-.3.5 4.4-11.3 7-18.6l3.6 16.8s10.2 46.7 12.3 56.3h-44.1zM247.1 152.9l-52 133.4-5.6-27c-9.6-31-39.6-64.6-73.2-81.4l47.6 170.6h56.3l83.8-195.6z" fill="#1434CB"/><path d="M146.9 152.9H60.8l-.7 3.8c66.7 16.2 110.9 55.3 129.2 102.2L170.6 169c-3.2-12.3-12.5-15.8-23.7-16.1z" fill="#F7A823"/></svg>
-                  <svg viewBox="0 0 780 500" class="sc-mc-icon" xmlns="http://www.w3.org/2000/svg"><circle cx="299.2" cy="250" r="157.1" fill="#EB001B"/><circle cx="480.8" cy="250" r="157.1" fill="#F79E1B"/><path d="M390 113.4c-58.8 46-96.5 117.4-96.5 197.4s37.7 151.4 96.5 197.4c58.8-46 96.5-117.4 96.5-197.4S448.8 159.4 390 113.4z" fill="#FF5F00"/></svg>
+                  <svg viewBox="0 0 152.407 108" class="sc-mc-icon" xmlns="http://www.w3.org/2000/svg">
+                    <g><rect fill="none" width="152.407" height="108"/><g><rect fill="#ff5f00" x="60.4117" y="25.6968" width="31.5" height="56.6064"/><path fill="#eb001b" d="M382.20839,306a35.9375,35.9375,0,0,1,13.7499-28.3032,36,36,0,1,0,0,56.6064A35.938,35.938,0,0,1,382.20839,306Z" transform="translate(-319.79589 -252)"/><path fill="#f79e1b" d="M454.20039,306a35.99867,35.99867,0,0,1-58.2452,28.3032,36.00518,36.00518,0,0,0,0-56.6064A35.99867,35.99867,0,0,1,454.20039,306Z" transform="translate(-319.79589 -252)"/><path fill="#f79e1b" d="M450.76889,328.3077v-1.1589h.4673v-.2361h-1.1901v.2361h.4675v1.1589Zm2.3105,0v-1.3973h-.3648l-.41959.9611-.42-.9611h-.365v1.3973h.2576v-1.054l.3935.9087h.2671l.39351-.9117v1.057Z" transform="translate(-319.79589 -252)"/></g></g>
+                  </svg>
                 </div>
               </div>
-              <div class="sc-stripe-element" id="card-element"></div>
+              <!-- Separate card fields -->
+              <div class="sc-card-fields">
+                <div class="sc-card-field-row">
+                  <label class="sc-card-field-label">Kart Numarası</label>
+                  <div class="sc-stripe-field" id="card-number-element"></div>
+                </div>
+                <div class="sc-card-field-split">
+                  <div class="sc-card-field-half">
+                    <label class="sc-card-field-label">Son Kullanma Tarihi</label>
+                    <div class="sc-stripe-field" id="card-expiry-element"></div>
+                  </div>
+                  <div class="sc-card-field-half">
+                    <label class="sc-card-field-label">CVC</label>
+                    <div class="sc-stripe-field" id="card-cvc-element"></div>
+                  </div>
+                </div>
+              </div>
               <div id="card-errors" class="sc-card-errors" role="alert"></div>
             </div>
           </section>
@@ -235,9 +268,7 @@
         <h3>Mesafeli Satış Sözleşmesi</h3>
         <button class="sc-legal-close" onclick="document.getElementById('agreementOverlay').classList.remove('sc-open')">&times;</button>
       </div>
-      <div class="sc-legal-modal-body" id="agreementBody">
-        <!-- Filled dynamically by JS -->
-      </div>
+      <div class="sc-legal-modal-body" id="agreementBody"></div>
       <div class="sc-legal-modal-footer">
         <button class="sc-legal-accept-btn" onclick="document.getElementById('agreementCheck').checked=true;document.getElementById('agreementOverlay').classList.remove('sc-open');">Okudum, Kabul Ediyorum</button>
       </div>
@@ -251,9 +282,7 @@
         <h3>Ticari Elektronik İleti Onayı</h3>
         <button class="sc-legal-close" onclick="document.getElementById('marketingOverlay').classList.remove('sc-open')">&times;</button>
       </div>
-      <div class="sc-legal-modal-body" id="marketingBody">
-        <!-- Filled dynamically by JS -->
-      </div>
+      <div class="sc-legal-modal-body" id="marketingBody"></div>
       <div class="sc-legal-modal-footer">
         <button class="sc-legal-accept-btn" onclick="document.getElementById('marketingCheck').checked=true;document.getElementById('marketingOverlay').classList.remove('sc-open');">Onaylıyorum</button>
       </div>
