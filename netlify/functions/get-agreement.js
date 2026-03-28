@@ -9,19 +9,40 @@
 
 const { shopifyRequest } = require('./shopify-auth');
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  'Content-Type': 'text/html; charset=utf-8'
-};
+// No CORS needed — this endpoint serves HTML pages directly in the browser
+
+// ---- HTML Sanitizer: strip dangerous tags/attributes to prevent XSS ----
+function sanitizeHtml(html) {
+  if (!html || typeof html !== 'string') return '';
+
+  // Remove <script> tags and their content
+  let clean = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+
+  // Remove <iframe>, <object>, <embed>, <form>, <input>, <textarea>, <select>, <button> tags
+  clean = clean.replace(/<\/?(iframe|object|embed|form|input|textarea|select|button|link|meta|base|applet)\b[^>]*>/gi, '');
+
+  // Remove on* event handlers (onclick, onerror, onload, etc.)
+  clean = clean.replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '');
+
+  // Remove javascript: URLs from href/src/action attributes
+  clean = clean.replace(/(href|src|action)\s*=\s*["']?\s*javascript\s*:/gi, '$1="');
+
+  // Remove data: URLs from src (can embed scripts)
+  clean = clean.replace(/src\s*=\s*["']?\s*data\s*:/gi, 'src="');
+
+  // Remove style attributes containing expression() or url(javascript:)
+  clean = clean.replace(/style\s*=\s*"[^"]*expression\s*\([^"]*"/gi, '');
+  clean = clean.replace(/style\s*=\s*'[^']*expression\s*\([^']*'/gi, '');
+
+  return clean;
+}
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers: CORS_HEADERS, body: '' };
+    return { statusCode: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' }, body: '' };
   }
   if (event.httpMethod !== 'GET') {
-    return { statusCode: 405, headers: CORS_HEADERS, body: 'Method not allowed' };
+    return { statusCode: 405, headers: { 'Content-Type': 'text/html; charset=utf-8' }, body: 'Method not allowed' };
   }
 
   try {
@@ -90,11 +111,14 @@ exports.handler = async (event) => {
       };
     }
 
+    // Sanitize agreement HTML to prevent stored XSS
+    const safeHtml = sanitizeHtml(agreementHtml);
+
     // Render the agreement as a styled page
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'text/html; charset=utf-8' },
-      body: renderAgreementPage(agreementHtml, order.name)
+      body: renderAgreementPage(safeHtml, order.name)
     };
 
   } catch (err) {

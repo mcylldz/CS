@@ -1,24 +1,42 @@
 /* ========================================
    Netlify Function: complete-order
-   1. Find/Create Shopify Customer
-   2. Create Shopify Order (paid)
-   3. Send Meta Conversions API Purchase event
+   1. Verify Stripe PaymentIntent succeeded
+   2. Find/Create Shopify Customer
+   3. Create Shopify Order (paid)
+   4. Send Meta Conversions API Purchase event
    - Uses Client Credentials Grant for Shopify auth
    ======================================== */
 
 const fetch = require('node-fetch');
 const crypto = require('crypto');
 const { shopifyRequest } = require('./shopify-auth');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const META_PIXEL_ID = process.env.META_PIXEL_ID;
 const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN;
+const ALLOWED_ORIGIN = process.env.CHECKOUT_ORIGIN || 'https://checkout.thesveltechic.com';
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Content-Type': 'application/json'
-};
+// ---- HTML Sanitizer: strip dangerous tags/attributes before storing ----
+function sanitizeHtml(html) {
+  if (!html || typeof html !== 'string') return '';
+  let clean = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  clean = clean.replace(/<\/?(iframe|object|embed|form|input|textarea|select|button|link|meta|base|applet)\b[^>]*>/gi, '');
+  clean = clean.replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '');
+  clean = clean.replace(/(href|src|action)\s*=\s*["']?\s*javascript\s*:/gi, '$1="');
+  clean = clean.replace(/src\s*=\s*["']?\s*data\s*:/gi, 'src="');
+  clean = clean.replace(/style\s*=\s*"[^"]*expression\s*\([^"]*"/gi, '');
+  clean = clean.replace(/style\s*=\s*'[^']*expression\s*\([^']*'/gi, '');
+  return clean;
+}
+
+function corsHeaders(origin) {
+  return {
+    'Access-Control-Allow-Origin': origin === ALLOWED_ORIGIN ? ALLOWED_ORIGIN : ALLOWED_ORIGIN,
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Content-Type': 'application/json'
+  };
+}
 
 // ---- SHA256 hash for Meta CAPI ----
 function sha256(value) {
@@ -28,11 +46,14 @@ function sha256(value) {
 
 // ---- Main Handler ----
 exports.handler = async (event) => {
+  const origin = event.headers.origin || '';
+  const headers = corsHeaders(origin);
+
   if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers: CORS_HEADERS, body: '' };
+    return { statusCode: 200, headers, body: '' };
   }
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Method not allowed' }) };
+    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
   try {
@@ -49,8 +70,59 @@ exports.handler = async (event) => {
       fbp, fbc, purchaseEventId,
       utm_source, utm_medium, utm_campaign, utm_term, utm_content,
       userAgent, sourceUrl,
-      agreementHtml, marketingConsent
+      agreementHtml: rawAgreementHtml, marketingConsent
     } = body;
+
+    // Sanitize agreement HTML to prevent stored XSS
+    const agreementHtml = sanitizeHtml(rawAgreementHtml);
+
+    // =============================================
+    // STEP 0: Verify Stripe PaymentIntent
+    // =============================================
+    if (!paymentIntentId || typeof paymentIntentId !== 'string' || !paymentIntentId.startsWith('pi_')) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ error: 'Geçersiz ödeme bilgisi.', success: false })
+      };
+    }
+
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    if (paymentIntent.status !== 'succeeded') {
+      console.error(`PaymentIntent ${paymentIntentId} status: ${paymentIntent.status}`);
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ error: 'Ödeme onaylanmadı.', success: false })
+      };
+    }
+
+    // Verify amount matches (prevent price manipulation)
+    const expectedTotal = Math.round(total);
+    if (paymentIntent.amount !== expectedTotal) {
+      console.error(`Amount mismatch: PI=${paymentIntent.amount}, expected=${expectedTotal}`);
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ error: 'Tutar uyuşmazlığı.', success: false })
+      };
+    }
+
+    // Check if this PaymentIntent was already used (prevent duplicate orders)
+    // Uses Stripe PI metadata — reliable, no extra Shopify API calls
+    if (paymentIntent.metadata && paymentIntent.metadata.shopify_order_id) {
+      console.warn(`PaymentIntent ${paymentIntentId} already used for order ${paymentIntent.metadata.shopify_order_name}`);
+      return {
+        statusCode: 409,
+        headers,
+        body: JSON.stringify({
+          error: 'Bu ödeme zaten işlenmiş.',
+          success: false,
+          shopifyOrderName: paymentIntent.metadata.shopify_order_name || ''
+        })
+      };
+    }
 
     // Get client IP from headers (Netlify provides this)
     const clientIp = event.headers['x-forwarded-for']?.split(',')[0]?.trim()
@@ -72,7 +144,7 @@ exports.handler = async (event) => {
     if (searchResp.customers && searchResp.customers.length > 0) {
       shopifyCustomerId = searchResp.customers[0].id;
       try {
-        await shopifyRequest(`customers/${shopifyCustomerId}.json`, 'PUT', {
+        const updatePayload = {
           customer: {
             id: shopifyCustomerId,
             phone: customer.phone,
@@ -89,7 +161,23 @@ exports.handler = async (event) => {
               default: true
             }]
           }
-        });
+        };
+        await shopifyRequest(`customers/${shopifyCustomerId}.json`, 'PUT', updatePayload);
+        // Save Stripe Customer ID as metafield if provided
+        if (stripeCustomerId) {
+          try {
+            await shopifyRequest(`customers/${shopifyCustomerId}/metafields.json`, 'POST', {
+              metafield: {
+                namespace: 'checkout',
+                key: 'stripe_customer_id',
+                value: stripeCustomerId,
+                type: 'single_line_text_field'
+              }
+            });
+          } catch (mfErr) {
+            console.warn('Stripe customer metafield update warning:', mfErr.message);
+          }
+        }
       } catch (updateErr) {
         console.warn('Customer update warning:', updateErr.message);
       }
@@ -128,6 +216,9 @@ exports.handler = async (event) => {
     // =============================================
     // STEP 2: Create Shopify Order
     // =============================================
+    // Use the verified amount from Stripe, not the client-sent total
+    const verifiedTotal = paymentIntent.amount;
+
     const lineItems = items.map(item => ({
       variant_id: item.variant_id,
       quantity: item.quantity,
@@ -147,13 +238,10 @@ exports.handler = async (event) => {
     if (stripeCustomerId) noteAttributes.push({ name: 'stripe_customer_id', value: stripeCustomerId });
     if (marketingConsent) noteAttributes.push({ name: 'marketing_consent', value: 'true' });
 
-    // Add agreement info as note_attributes for Shopify email template access
     if (agreementHtml) {
       noteAttributes.push({ name: 'mesafeli_satis_sozlesmesi', value: 'onaylandi' });
-      // Agreement URL will be added after we know the order name
     }
 
-    // Build metafields array for atomic creation with the order
     const orderMetafields = [];
     if (agreementHtml) {
       orderMetafields.push({
@@ -184,7 +272,7 @@ exports.handler = async (event) => {
         send_fulfillment_receipt: true,
         note: `Custom checkout | Stripe PI: ${paymentIntentId}\n\n--- MESAFELİ SATIŞ SÖZLEŞMESİ ---\nSözleşme elektronik ortamda onaylanmıştır.`,
         note_attributes: noteAttributes,
-        tags: 'custom-checkout, stripe',
+        tags: `custom-checkout, stripe, pi_${paymentIntentId.replace('pi_', '')}`,
         metafields: orderMetafields,
         shipping_address: {
           first_name: customer.firstName,
@@ -216,19 +304,57 @@ exports.handler = async (event) => {
         transactions: [{
           kind: 'sale',
           status: 'success',
-          amount: (total / 100).toFixed(2),
+          amount: (verifiedTotal / 100).toFixed(2),
           currency: 'TRY',
           gateway: 'stripe'
         }]
       }
     };
 
+    // Server-side coupon re-validation before applying discount to Shopify order
     if (discountAmount > 0 && couponCode) {
-      orderPayload.order.discount_codes = [{
-        code: couponCode,
-        amount: (discountAmount / 100).toFixed(2),
-        type: 'fixed_amount'
-      }];
+      let couponValid = false;
+      try {
+        const lookupResp = await shopifyRequest(
+          `discount_codes/lookup.json?code=${encodeURIComponent(couponCode.trim().toUpperCase())}`
+        );
+        if (lookupResp.discount_code && lookupResp.discount_code.price_rule_id) {
+          const ruleResp = await shopifyRequest(
+            `price_rules/${lookupResp.discount_code.price_rule_id}.json`
+          );
+          const rule = ruleResp.price_rule;
+          if (rule) {
+            const now = new Date();
+            const notExpired = !rule.ends_at || new Date(rule.ends_at) >= now;
+            const started = !rule.starts_at || new Date(rule.starts_at) <= now;
+            if (notExpired && started) {
+              // Recalculate discount server-side
+              let serverDiscount = 0;
+              const ruleValue = parseFloat(rule.value);
+              const clientSubtotal = subtotal || 0;
+              if (rule.value_type === 'percentage') {
+                serverDiscount = Math.round(clientSubtotal * Math.abs(ruleValue) / 100);
+              } else if (rule.value_type === 'fixed_amount') {
+                serverDiscount = Math.round(Math.abs(ruleValue) * 100);
+              }
+              if (serverDiscount > clientSubtotal) serverDiscount = clientSubtotal;
+
+              // Use server-calculated discount (don't trust client value)
+              orderPayload.order.discount_codes = [{
+                code: couponCode,
+                amount: (serverDiscount / 100).toFixed(2),
+                type: 'fixed_amount'
+              }];
+              couponValid = true;
+            }
+          }
+        }
+      } catch (couponErr) {
+        console.warn('Coupon re-validation warning:', couponErr.message);
+      }
+      if (!couponValid) {
+        console.warn(`Coupon "${couponCode}" failed server-side re-validation, skipping discount on order`);
+      }
     }
 
     const orderResp = await shopifyRequest('orders.json', 'POST', orderPayload);
@@ -236,7 +362,20 @@ exports.handler = async (event) => {
 
     console.log(`Shopify order created: ${shopifyOrder.name} (ID: ${shopifyOrder.id})`);
 
-    // Update order with agreement URL in note_attributes (for Shopify email templates)
+    // Mark PaymentIntent as used (prevents duplicate order creation)
+    try {
+      await stripe.paymentIntents.update(paymentIntentId, {
+        metadata: {
+          ...paymentIntent.metadata,
+          shopify_order_id: shopifyOrder.id.toString(),
+          shopify_order_name: shopifyOrder.name
+        }
+      });
+    } catch (piUpdateErr) {
+      console.warn('PI metadata update warning:', piUpdateErr.message);
+    }
+
+    // Update order with agreement URL in note_attributes
     if (agreementHtml) {
       const agreementLink = `https://checkout.thesveltechic.com/api/get-agreement?order=${encodeURIComponent(shopifyOrder.name)}&email=${encodeURIComponent(customer.email)}`;
       try {
@@ -248,14 +387,12 @@ exports.handler = async (event) => {
             note_attributes: existingAttrs
           }
         });
-        console.log('Agreement URL added to order note_attributes');
       } catch (noteErr) {
-        console.error('Failed to add agreement URL to note_attributes:', noteErr.message);
+        console.error('Failed to add agreement URL:', noteErr.message);
       }
     }
 
-    // Agreement metafield is now saved atomically with order creation (via metafields array above)
-    // If it fails, try the separate API call as fallback
+    // Metafield fallback
     if (agreementHtml && (!shopifyOrder.metafields || shopifyOrder.metafields.length === 0)) {
       try {
         await shopifyRequest(`orders/${shopifyOrder.id}/metafields.json`, 'POST', {
@@ -266,23 +403,8 @@ exports.handler = async (event) => {
             type: 'multi_line_text_field'
           }
         });
-        console.log('Agreement metafield saved via fallback API call');
       } catch (mfErr) {
-        console.error('Agreement metafield FALLBACK also failed:', mfErr.message);
-        // Last resort: try with json type
-        try {
-          await shopifyRequest(`orders/${shopifyOrder.id}/metafields.json`, 'POST', {
-            metafield: {
-              namespace: 'checkout',
-              key: 'mesafeli_satis_sozlesmesi',
-              value: JSON.stringify({ html: agreementHtml, timestamp: new Date().toISOString() }),
-              type: 'json'
-            }
-          });
-          console.log('Agreement metafield saved via JSON fallback');
-        } catch (jsonErr) {
-          console.error('Agreement metafield JSON fallback also failed:', jsonErr.message);
-        }
+        console.error('Agreement metafield fallback failed:', mfErr.message);
       }
     }
 
@@ -291,7 +413,6 @@ exports.handler = async (event) => {
     // =============================================
     try {
       const eventTime = Math.floor(Date.now() / 1000);
-      // Use the same eventId from browser pixel for deduplication
       const eventId = purchaseEventId || `purchase_${shopifyOrder.id}_${eventTime}`;
 
       const metaPayload = {
@@ -318,7 +439,7 @@ exports.handler = async (event) => {
           },
           custom_data: {
             currency: 'TRY',
-            value: parseFloat((total / 100).toFixed(2)),
+            value: parseFloat((verifiedTotal / 100).toFixed(2)),
             content_type: 'product',
             contents: items.map(item => ({
               id: `shopify_TR_${item.product_id}_${item.variant_id}`,
@@ -332,9 +453,6 @@ exports.handler = async (event) => {
         }]
       };
 
-      // Uncomment for testing in Meta Events Manager:
-      // metaPayload.test_event_code = 'TEST12345';
-
       const metaResp = await fetch(
         `https://graph.facebook.com/v19.0/${META_PIXEL_ID}/events?access_token=${META_ACCESS_TOKEN}`,
         {
@@ -346,10 +464,6 @@ exports.handler = async (event) => {
 
       const metaResult = await metaResp.json();
       console.log('Meta CAPI response:', JSON.stringify(metaResult));
-
-      if (metaResult.error) {
-        console.error('Meta CAPI error:', metaResult.error);
-      }
     } catch (metaErr) {
       console.error('Meta CAPI exception:', metaErr.message);
     }
@@ -357,12 +471,11 @@ exports.handler = async (event) => {
     // =============================================
     // RESPONSE
     // =============================================
-    // Build agreement URL for customer access
     const agreementUrl = `https://checkout.thesveltechic.com/api/get-agreement?order=${encodeURIComponent(shopifyOrder.name)}&email=${encodeURIComponent(customer.email)}`;
 
     return {
       statusCode: 200,
-      headers: CORS_HEADERS,
+      headers,
       body: JSON.stringify({
         success: true,
         shopifyOrderId: shopifyOrder.id,
@@ -376,9 +489,9 @@ exports.handler = async (event) => {
     console.error('complete-order error:', err);
     return {
       statusCode: 500,
-      headers: CORS_HEADERS,
+      headers,
       body: JSON.stringify({
-        error: err.message || 'Sipariş oluşturulurken bir hata oluştu.',
+        error: 'Sipariş oluşturulurken bir hata oluştu. Lütfen destek ile iletişime geçin.',
         success: false
       })
     };

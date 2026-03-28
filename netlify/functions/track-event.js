@@ -11,12 +11,16 @@ const crypto = require('crypto');
 const META_PIXEL_ID = process.env.META_PIXEL_ID;
 const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN;
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Content-Type': 'application/json'
-};
+const ALLOWED_ORIGIN = process.env.CHECKOUT_ORIGIN || 'https://checkout.thesveltechic.com';
+
+function corsHeaders(origin) {
+  return {
+    'Access-Control-Allow-Origin': origin === ALLOWED_ORIGIN ? ALLOWED_ORIGIN : ALLOWED_ORIGIN,
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Content-Type': 'application/json'
+  };
+}
 
 function sha256(value) {
   if (!value) return '';
@@ -24,11 +28,14 @@ function sha256(value) {
 }
 
 exports.handler = async (event) => {
+  const origin = event.headers.origin || '';
+  const headers = corsHeaders(origin);
+
   if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers: CORS_HEADERS, body: '' };
+    return { statusCode: 200, headers, body: '' };
   }
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Method not allowed' }) };
+    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
   try {
@@ -51,7 +58,7 @@ exports.handler = async (event) => {
     if (!allowedEvents.includes(eventName)) {
       return {
         statusCode: 400,
-        headers: CORS_HEADERS,
+        headers: headers,
         body: JSON.stringify({ error: 'Invalid event name' })
       };
     }
@@ -140,7 +147,7 @@ exports.handler = async (event) => {
 
     return {
       statusCode: 200,
-      headers: CORS_HEADERS,
+      headers: headers,
       body: JSON.stringify({
         success: true,
         eventName: eventName,
@@ -153,8 +160,8 @@ exports.handler = async (event) => {
     console.error('track-event error:', err);
     return {
       statusCode: 500,
-      headers: CORS_HEADERS,
-      body: JSON.stringify({ error: err.message, success: false })
+      headers: headers,
+      body: JSON.stringify({ error: 'Olay kaydedilemedi.', success: false })
     };
   }
 };

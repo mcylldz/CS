@@ -8,19 +8,26 @@
 
 const { shopifyRequest } = require('./shopify-auth');
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Content-Type': 'application/json'
-};
+const ALLOWED_ORIGIN = process.env.CHECKOUT_ORIGIN || 'https://checkout.thesveltechic.com';
+
+function corsHeaders(origin) {
+  return {
+    'Access-Control-Allow-Origin': origin === ALLOWED_ORIGIN ? ALLOWED_ORIGIN : ALLOWED_ORIGIN,
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Content-Type': 'application/json'
+  };
+}
 
 exports.handler = async (event) => {
+  const origin = event.headers.origin || '';
+  const headers = corsHeaders(origin);
+
   if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers: CORS_HEADERS, body: '' };
+    return { statusCode: 200, headers, body: '' };
   }
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Method not allowed' }) };
+    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
   try {
@@ -37,7 +44,7 @@ exports.handler = async (event) => {
     if (!customer || !customer.email || !items || items.length === 0) {
       return {
         statusCode: 400,
-        headers: CORS_HEADERS,
+        headers: headers,
         body: JSON.stringify({ error: 'Customer email and items are required' })
       };
     }
@@ -129,7 +136,7 @@ exports.handler = async (event) => {
 
     return {
       statusCode: 200,
-      headers: CORS_HEADERS,
+      headers: headers,
       body: JSON.stringify({
         success: true,
         draftOrderId: draftOrder.id,
@@ -141,9 +148,9 @@ exports.handler = async (event) => {
     console.error('abandoned-checkout error:', err);
     return {
       statusCode: 500,
-      headers: CORS_HEADERS,
+      headers: headers,
       body: JSON.stringify({
-        error: err.message || 'Yarım bırakılan ödeme kaydedilemedi.',
+        error: 'Yarım bırakılan ödeme kaydedilemedi.',
         success: false
       })
     };

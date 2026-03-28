@@ -566,13 +566,15 @@
 
   // ---- Bind Events ----
   function bindEvents() {
-    // Summary toggle (mobile)
+    // Summary toggle (mobile) — starts open, click to close/open
     var toggleBtn = document.getElementById('summaryToggle');
     var summaryContent = document.getElementById('summaryContent');
     if (toggleBtn) {
+      // Start with toggle arrow rotated (open state)
+      toggleBtn.classList.add('sc-open');
       toggleBtn.addEventListener('click', function () {
         toggleBtn.classList.toggle('sc-open');
-        summaryContent.classList.toggle('sc-open');
+        summaryContent.classList.toggle('sc-closed');
       });
     }
 
@@ -685,17 +687,49 @@
   }
 
   // ---- Form Validation ----
+  var fieldMessages = {
+    email: 'Geçerli bir e-posta adresi girin.',
+    phone: 'Telefon numaranızı girin.',
+    firstName: 'Adınızı girin.',
+    lastName: 'Soyadınızı girin.',
+    city: 'İl seçiniz.',
+    district: 'İlçe seçiniz.',
+    mahalle: 'Mahalle seçiniz.',
+    address: 'Adres bilgisi girin.',
+    zip: 'Posta kodunu girin.'
+  };
+
+  function showFieldError(el, msg) {
+    clearFieldError(el);
+    el.classList.add('sc-error');
+    if (msg) {
+      var errSpan = document.createElement('span');
+      errSpan.className = 'sc-field-error';
+      errSpan.textContent = msg;
+      // Insert after the input or after its parent .sc-select-wrap
+      var parent = el.closest('.sc-select-wrap') || el;
+      parent.parentNode.insertBefore(errSpan, parent.nextSibling);
+    }
+  }
+
+  function clearFieldError(el) {
+    el.classList.remove('sc-error');
+    var parent = el.closest('.sc-select-wrap') || el;
+    var existing = parent.parentNode.querySelector('.sc-field-error');
+    if (existing) existing.remove();
+  }
+
   function validateField(el) {
     if (!el) return true;
     if (el.required && !el.value.trim()) {
-      el.classList.add('sc-error');
+      showFieldError(el, fieldMessages[el.id] || 'Bu alan zorunludur.');
       return false;
     }
     if (el.id === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(el.value.trim())) {
-      el.classList.add('sc-error');
+      showFieldError(el, fieldMessages.email);
       return false;
     }
-    el.classList.remove('sc-error');
+    clearFieldError(el);
     return true;
   }
 
@@ -757,6 +791,8 @@
           currency: 'try',
           customer: customerInfo,
           items: cartItems.map(i => ({
+            variant_id: i.variant_id,
+            product_id: i.product_id,
             title: i.title,
             sku: i.sku,
             quantity: i.quantity,
@@ -884,9 +920,17 @@
     const btn = document.getElementById('submitBtn');
     const text = document.getElementById('btnText');
     const spinner = document.getElementById('btnSpinner');
+    const overlay = document.getElementById('processingOverlay');
     btn.disabled = loading;
     text.textContent = loading ? 'İşleniyor...' : 'Siparişi Tamamla';
     spinner.style.display = loading ? 'inline-block' : 'none';
+    if (overlay) {
+      if (loading) {
+        overlay.classList.add('sc-active');
+      } else {
+        overlay.classList.remove('sc-active');
+      }
+    }
   }
 
   function showGlobalError(msg) {

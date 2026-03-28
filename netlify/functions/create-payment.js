@@ -2,25 +2,34 @@
    Netlify Function: create-payment
    - Returns Stripe publishable key
    - Creates Stripe Customer + PaymentIntent
+   - Validates amount server-side via Shopify
    ======================================== */
 
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const { shopifyRequest } = require('./shopify-auth');
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Content-Type': 'application/json'
-};
+const ALLOWED_ORIGIN = process.env.CHECKOUT_ORIGIN || 'https://checkout.thesveltechic.com';
+
+function corsHeaders(origin) {
+  return {
+    'Access-Control-Allow-Origin': origin === ALLOWED_ORIGIN ? ALLOWED_ORIGIN : ALLOWED_ORIGIN,
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Content-Type': 'application/json'
+  };
+}
 
 exports.handler = async (event) => {
+  const origin = event.headers.origin || '';
+  const headers = corsHeaders(origin);
+
   // Handle preflight
   if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers: CORS_HEADERS, body: '' };
+    return { statusCode: 200, headers, body: '' };
   }
 
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Method not allowed' }) };
+    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
   try {
@@ -30,7 +39,7 @@ exports.handler = async (event) => {
     if (body.action === 'get_key') {
       return {
         statusCode: 200,
-        headers: CORS_HEADERS,
+        headers,
         body: JSON.stringify({
           publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
           metaPixelId: process.env.META_PIXEL_ID || ''
@@ -45,9 +54,49 @@ exports.handler = async (event) => {
       if (!amount || amount < 100) {
         return {
           statusCode: 400,
-          headers: CORS_HEADERS,
+          headers,
           body: JSON.stringify({ error: 'Geçersiz tutar.' })
         };
+      }
+
+      // ---- Server-side price verification ----
+      // Verify item prices against Shopify to prevent price manipulation
+      if (items && items.length > 0) {
+        let verifiedSubtotal = 0;
+        for (const item of items) {
+          if (!item.variant_id || !item.quantity || item.quantity < 1) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ error: 'Geçersiz ürün bilgisi.' })
+            };
+          }
+          try {
+            const variantResp = await shopifyRequest(
+              `variants/${item.variant_id}.json`
+            );
+            const shopifyPrice = Math.round(parseFloat(variantResp.variant.price) * 100);
+            verifiedSubtotal += shopifyPrice * item.quantity;
+          } catch (vErr) {
+            console.error(`Variant ${item.variant_id} verification failed:`, vErr.message);
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ error: 'Ürün fiyatı doğrulanamadı.' })
+            };
+          }
+        }
+
+        // Allow up to verifiedSubtotal (amount could be less due to discount)
+        // But amount should never exceed verified subtotal
+        if (amount > verifiedSubtotal) {
+          console.error(`Price manipulation detected: client=${amount}, shopify=${verifiedSubtotal}`);
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({ error: 'Tutar uyuşmazlığı.' })
+          };
+        }
       }
 
       // Find or create Stripe customer by email
@@ -90,11 +139,13 @@ exports.handler = async (event) => {
       }
 
       // Create PaymentIntent
-      // Stripe expects amount in smallest currency unit (kuruş for TRY)
+      // setup_future_usage: 'off_session' saves the payment method
+      // to the customer for future charges (subscriptions, manual orders)
       const paymentIntent = await stripe.paymentIntents.create({
-        amount: Math.round(amount), // already in kuruş from Shopify
+        amount: Math.round(amount),
         currency: currency || 'try',
         customer: stripeCustomer.id,
+        setup_future_usage: 'off_session',
         description: `Svelte Chic - ${items.map(i => i.title).join(', ').substring(0, 200)}`,
         metadata: {
           customer_email: customer.email,
@@ -109,7 +160,7 @@ exports.handler = async (event) => {
 
       return {
         statusCode: 200,
-        headers: CORS_HEADERS,
+        headers,
         body: JSON.stringify({
           clientSecret: paymentIntent.client_secret,
           stripeCustomerId: stripeCustomer.id,
@@ -120,7 +171,7 @@ exports.handler = async (event) => {
 
     return {
       statusCode: 400,
-      headers: CORS_HEADERS,
+      headers,
       body: JSON.stringify({ error: 'Geçersiz istek.' })
     };
 
@@ -128,8 +179,8 @@ exports.handler = async (event) => {
     console.error('create-payment error:', err);
     return {
       statusCode: 500,
-      headers: CORS_HEADERS,
-      body: JSON.stringify({ error: err.message || 'Sunucu hatası.' })
+      headers,
+      body: JSON.stringify({ error: 'Ödeme işlemi başlatılamadı. Lütfen tekrar deneyin.' })
     };
   }
 };

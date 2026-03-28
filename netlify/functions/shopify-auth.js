@@ -1,6 +1,7 @@
 /* ========================================
    Shopify Auth — Client Credentials Grant
    Token valid for 24h, cached in memory.
+   Includes retry logic for 429 rate limits.
    ======================================== */
 
 const fetch = require('node-fetch');
@@ -53,9 +54,18 @@ async function getShopifyToken() {
 }
 
 /**
- * Make an authenticated request to Shopify Admin API.
+ * Sleep helper for retry delays
  */
-async function shopifyRequest(endpoint, method = 'GET', data = null) {
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Make an authenticated request to Shopify Admin API.
+ * Automatically retries on 429 (rate limit) with exponential backoff.
+ * Max 3 retries with 600ms, 1200ms, 2400ms delays.
+ */
+async function shopifyRequest(endpoint, method = 'GET', data = null, retries = 3) {
   const token = await getShopifyToken();
   const API_VERSION = '2024-10';
 
@@ -69,14 +79,41 @@ async function shopifyRequest(endpoint, method = 'GET', data = null) {
   if (data) opts.body = JSON.stringify(data);
 
   const url = `https://${SHOPIFY_STORE_DOMAIN}/admin/api/${API_VERSION}/${endpoint}`;
-  const resp = await fetch(url, opts);
-  const json = await resp.json();
 
-  if (!resp.ok) {
-    console.error('Shopify API error:', JSON.stringify(json));
-    throw new Error(`Shopify ${method} ${endpoint}: ${resp.status} - ${JSON.stringify(json.errors || json)}`);
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    // Add small delay between requests to avoid hitting rate limit
+    if (attempt > 0) {
+      const delay = 600 * Math.pow(2, attempt - 1); // 600ms, 1200ms, 2400ms
+      console.log(`Shopify retry #${attempt} for ${method} ${endpoint} (waiting ${delay}ms)`);
+      await sleep(delay);
+    }
+
+    const resp = await fetch(url, opts);
+
+    // Handle 429 rate limit with retry
+    if (resp.status === 429) {
+      if (attempt < retries) {
+        const retryAfter = resp.headers.get('retry-after');
+        const waitMs = retryAfter ? parseFloat(retryAfter) * 1000 : 600 * Math.pow(2, attempt);
+        console.warn(`Shopify 429 rate limit on ${method} ${endpoint}, retry in ${waitMs}ms`);
+        await sleep(waitMs);
+        continue;
+      }
+      // All retries exhausted
+      const errJson = await resp.json().catch(() => ({}));
+      console.error('Shopify 429 exhausted retries:', JSON.stringify(errJson));
+      throw new Error(`Shopify rate limit exceeded after ${retries} retries`);
+    }
+
+    const json = await resp.json();
+
+    if (!resp.ok) {
+      console.error('Shopify API error:', JSON.stringify(json));
+      throw new Error(`Shopify ${method} ${endpoint}: ${resp.status} - ${JSON.stringify(json.errors || json)}`);
+    }
+
+    return json;
   }
-  return json;
 }
 
 module.exports = { getShopifyToken, shopifyRequest };
