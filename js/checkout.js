@@ -555,7 +555,7 @@
   }
 
   function validateStep1() {
-    var fields = ['email', 'phone', 'firstName', 'lastName', 'city', 'district', 'mahalle', 'address'];
+    var fields = ['email', 'phone', 'firstName', 'lastName', 'city', 'district', 'mahalle', 'address', 'zip'];
     var allValid = true;
     fields.forEach(function(id) {
       var el = document.getElementById(id);
@@ -847,8 +847,7 @@
         const successParams = new URLSearchParams({
           order: orderData.shopifyOrderName || '',
           email: customerInfo.email,
-          total: formatMoney(subtotal - discountAmount),
-          agreement: orderData.agreementUrl || ''
+          total: formatMoney(subtotal - discountAmount)
         });
         window.location.href = '/success.html?' + successParams.toString();
 
@@ -930,7 +929,7 @@
 
     return '<h3 style="text-align:center;margin-bottom:4px;">MESAFELİ SATIŞ SÖZLEŞMESİ</h3>' +
       '<p style="text-align:center;font-size:11px;color:#888;margin-bottom:16px;">Son G\u00fcncelleme Tarihi: 27 Mart 2026</p>' +
-      '<p>\u0130\u015fbu Mesafeli Sat\u0131\u015f S\u00f6zle\u015fmesi ("\u015eS\u00f6zle\u015fme"), 6502 say\u0131l\u0131 T\u00fcketicinin Korunmas\u0131 Hakk\u0131nda Kanun ve Mesafeli S\u00f6zle\u015fmeler Y\u00f6netmeli\u011fi h\u00fck\u00fcmleri \u00e7er\u00e7evesinde, a\u015fa\u011f\u0131da bilgileri yer alan SATICI ile ALICI aras\u0131nda, elektronik ortamda kurulmu\u015ftur.</p>' +
+      '<p>\u0130\u015fbu Mesafeli Sat\u0131\u015f S\u00f6zle\u015fmesi ("S\u00f6zle\u015fme"), 6502 say\u0131l\u0131 T\u00fcketicinin Korunmas\u0131 Hakk\u0131nda Kanun ve Mesafeli S\u00f6zle\u015fmeler Y\u00f6netmeli\u011fi h\u00fck\u00fcmleri \u00e7er\u00e7evesinde, a\u015fa\u011f\u0131da bilgileri yer alan SATICI ile ALICI aras\u0131nda, elektronik ortamda kurulmu\u015ftur.</p>' +
 
       '<h4>MADDE 1 \u2014 TARAFLAR</h4>' +
       '<p><strong>1.1 SATICI B\u0130LG\u0130LER\u0130</strong></p>' +
@@ -1066,9 +1065,17 @@
       '<p>18.3. \u0130\u015fbu S\u00f6zle\u015fme, 18 (on sekiz) maddeden olu\u015fmakta olup, taraflarca okunarak kabul edilmi\u015ftir.</p>' +
 
       '<hr style="margin:16px 0;">' +
-      '<p><strong>SATICI:</strong> MESU L.L.C-F.Z &mdash; Meydan Grandstand, 6th Floor, Dubai, BAE</p>' +
-      '<p><strong>ALICI:</strong> ' + fullName + ' &mdash; ' + escapeHtml(fullAddress) + '</p>' +
-      '<p><strong>Onay Tarihi:</strong> ' + dateStr + '</p>';
+      '<div style="background:#fafaf8;border:1px solid #e8e4dc;border-radius:6px;padding:16px;margin:16px 0;">' +
+      '<h4 style="margin:0 0 12px;font-size:14px;">ELEKTRON\u0130K ONAY KAYDI</h4>' +
+      '<table style="width:100%;font-size:13px;">' +
+      '<tr><td style="padding:4px 8px;color:#666;width:180px;"><strong>SATICI</strong></td><td style="padding:4px 8px;">MESU L.L.C-F.Z &mdash; Meydan Grandstand, 6th Floor, Dubai, BAE</td></tr>' +
+      '<tr><td style="padding:4px 8px;color:#666;"><strong>ALICI</strong></td><td style="padding:4px 8px;">' + fullName + ' &mdash; ' + escapeHtml(fullAddress) + '</td></tr>' +
+      '<tr><td style="padding:4px 8px;color:#666;"><strong>E-posta</strong></td><td style="padding:4px 8px;">' + escapeHtml(ci.email) + '</td></tr>' +
+      '<tr><td style="padding:4px 8px;color:#666;"><strong>Onay Tarihi ve Saati</strong></td><td style="padding:4px 8px;">' + dateStr + ' ' + today.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '</td></tr>' +
+      '<tr><td style="padding:4px 8px;color:#666;"><strong>S\u00f6zle\u015fme No</strong></td><td style="padding:4px 8px;">MSS-' + today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + String(today.getDate()).padStart(2,'0') + '-' + Date.now().toString(36).toUpperCase() + '</td></tr>' +
+      '</table>' +
+      '<p style="font-size:11px;color:#999;margin-top:12px;margin-bottom:0;">Bu s\u00f6zle\u015fme, ALICI taraf\u0131ndan elektronik ortamda (checkout.thesveltechic.com) onay kutucu\u011fu i\u015faretlenerek ve sipari\u015f tamamlanarak kabul edilmi\u015ftir. 6098 say\u0131l\u0131 T\u00fcrk Bor\u00e7lar Kanunu m.15 ve 6102 say\u0131l\u0131 T\u00fcrk Ticaret Kanunu m.18/3 uyar\u0131nca elektronik ortamda kurulan bu s\u00f6zle\u015fme ge\u00e7erli ve ba\u011flay\u0131c\u0131d\u0131r.</p>' +
+      '</div>';
   }
 
   function generateMarketingHtml() {

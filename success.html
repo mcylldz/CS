@@ -149,13 +149,17 @@
   <script>
     (function() {
       const p = new URLSearchParams(window.location.search);
-      document.getElementById('orderNumber').textContent = p.get('order') || '—';
-      document.getElementById('orderEmail').textContent = p.get('email') || '—';
-      document.getElementById('orderTotal').textContent = p.get('total') || '—';
+      var orderName = p.get('order') || '';
+      var email = p.get('email') || '';
+      var total = p.get('total') || '';
 
-      // Show agreement link if available
-      var agreementUrl = p.get('agreement');
-      if (agreementUrl) {
+      document.getElementById('orderNumber').textContent = orderName || '\u2014';
+      document.getElementById('orderEmail').textContent = email || '\u2014';
+      document.getElementById('orderTotal').textContent = total || '\u2014';
+
+      // Always show agreement link if we have order + email
+      if (orderName && email) {
+        var agreementUrl = '/api/get-agreement?order=' + encodeURIComponent(orderName) + '&email=' + encodeURIComponent(email);
         document.getElementById('agreementLink').href = agreementUrl;
         document.getElementById('agreementLinkWrap').style.display = 'block';
       }
