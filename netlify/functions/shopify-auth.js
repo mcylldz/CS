@@ -65,7 +65,7 @@ function sleep(ms) {
  * Automatically retries on 429 (rate limit) with exponential backoff.
  * Max 3 retries with 600ms, 1200ms, 2400ms delays.
  */
-async function shopifyRequest(endpoint, method = 'GET', data = null, retries = 3) {
+async function shopifyRequest(endpoint, method = 'GET', data = null, retries = 5) {
   const token = await getShopifyToken();
   const API_VERSION = '2024-10';
 
@@ -83,7 +83,7 @@ async function shopifyRequest(endpoint, method = 'GET', data = null, retries = 3
   for (let attempt = 0; attempt <= retries; attempt++) {
     // Add small delay between requests to avoid hitting rate limit
     if (attempt > 0) {
-      const delay = 600 * Math.pow(2, attempt - 1); // 600ms, 1200ms, 2400ms
+      const delay = 1000 * Math.pow(2, attempt - 1); // 1s, 2s, 4s, 8s, 16s
       console.log(`Shopify retry #${attempt} for ${method} ${endpoint} (waiting ${delay}ms)`);
       await sleep(delay);
     }

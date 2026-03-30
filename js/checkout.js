@@ -845,47 +845,79 @@
           console.log('Meta Pixel [Purchase] eventID:', purchaseEventId);
         }
 
-        // Step 3: Complete order (Shopify + Meta CAPI)
-        const orderResp = await fetch('/api/complete-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            paymentIntentId: paymentIntent.id,
-            stripeCustomerId: piData.stripeCustomerId,
-            customer: customerInfo,
-            items: cartItems,
-            subtotal: subtotal,
-            discountAmount: discountAmount,
-            couponCode: appliedCoupon,
-            total: subtotal - discountAmount,
-            // Meta & tracking
-            fbp: fbp,
-            fbc: fbc,
-            purchaseEventId: purchaseEventId,
-            utm_source: utmSource,
-            utm_medium: utmMedium,
-            utm_campaign: utmCampaign,
-            utm_term: utmTerm,
-            utm_content: utmContent,
-            userAgent: navigator.userAgent,
-            sourceUrl: window.location.href,
-            agreementHtml: generateAgreementHtml(),
-            marketingConsent: document.getElementById('marketingCheck').checked
-          })
+        // Step 3: Complete order (Shopify + Meta CAPI) — with retry
+        var orderData = null;
+        var completeOrderBody = JSON.stringify({
+          paymentIntentId: paymentIntent.id,
+          stripeCustomerId: piData.stripeCustomerId,
+          customer: customerInfo,
+          items: cartItems,
+          subtotal: subtotal,
+          discountAmount: discountAmount,
+          couponCode: appliedCoupon,
+          total: subtotal - discountAmount,
+          fbp: fbp,
+          fbc: fbc,
+          purchaseEventId: purchaseEventId,
+          utm_source: utmSource,
+          utm_medium: utmMedium,
+          utm_campaign: utmCampaign,
+          utm_term: utmTerm,
+          utm_content: utmContent,
+          userAgent: navigator.userAgent,
+          sourceUrl: window.location.href,
+          agreementHtml: generateAgreementHtml(),
+          marketingConsent: document.getElementById('marketingCheck').checked
         });
-        const orderData = await orderResp.json();
 
-        if (orderData.error) {
-          console.error('Order creation issue:', orderData.error);
+        var maxRetries = 3;
+        for (var attempt = 0; attempt < maxRetries; attempt++) {
+          try {
+            if (attempt > 0) {
+              console.log('complete-order retry #' + attempt);
+              await new Promise(function(r) { setTimeout(r, 2000 * attempt); });
+            }
+            var orderResp = await fetch('/api/complete-order', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: completeOrderBody
+            });
+            orderData = await orderResp.json();
+
+            // 409 = duplicate (already processed) — treat as success
+            if (orderResp.status === 409) {
+              console.log('Order already processed:', orderData.shopifyOrderName);
+              break;
+            }
+
+            if (orderData.success) break; // success — stop retrying
+
+            console.error('complete-order attempt ' + (attempt + 1) + ' failed:', orderData.error);
+          } catch (fetchErr) {
+            console.error('complete-order fetch error attempt ' + (attempt + 1) + ':', fetchErr.message);
+            orderData = null;
+          }
         }
 
-        // Step 4: Redirect to success
-        const successParams = new URLSearchParams({
-          order: orderData.shopifyOrderName || '',
-          email: customerInfo.email,
-          total: formatMoney(subtotal - discountAmount)
-        });
-        window.location.href = '/success.html?' + successParams.toString();
+        // Step 4: Check result before redirecting
+        if (orderData && (orderData.success || orderData.shopifyOrderName)) {
+          var successParams = new URLSearchParams({
+            order: orderData.shopifyOrderName || '',
+            email: customerInfo.email,
+            total: formatMoney(subtotal - discountAmount)
+          });
+          window.location.href = '/success.html?' + successParams.toString();
+        } else {
+          // Payment taken but Shopify order failed — show critical error
+          showGlobalError(
+            'Ödemeniz alındı ancak sipariş sisteme kaydedilemedi. ' +
+            'Lütfen bu referans numarasını not alıp destek ile iletişime geçin: ' +
+            paymentIntent.id
+          );
+          isProcessing = false;
+          setLoading(false);
+          return;
+        }
 
       } else {
         throw new Error('Ödeme tamamlanamadı. Durum: ' + paymentIntent.status);
