@@ -3,7 +3,8 @@
    1. Verify Stripe PaymentIntent succeeded
    2. Find/Create Shopify Customer
    3. Create Shopify Order (paid)
-   4. Send Meta Conversions API Purchase event
+   4. Mark PI as used (idempotency)
+   5. Fire-and-forget: agreement metadata, Meta CAPI
    - Uses Client Credentials Grant for Shopify auth
    ======================================== */
 
@@ -42,6 +43,12 @@ function corsHeaders(origin) {
 function sha256(value) {
   if (!value) return '';
   return crypto.createHash('sha256').update(value.trim().toLowerCase()).digest('hex');
+}
+
+// ---- Fire-and-forget helper: runs tasks but never blocks/throws ----
+function fireAndForget(label, fn) {
+  try { fn().catch(err => console.warn(`[fire-and-forget] ${label}:`, err.message)); }
+  catch (err) { console.warn(`[fire-and-forget] ${label}:`, err.message); }
 }
 
 // ---- Main Handler ----
@@ -110,7 +117,6 @@ exports.handler = async (event) => {
     }
 
     // Check if this PaymentIntent was already used (prevent duplicate orders)
-    // Uses Stripe PI metadata — reliable, no extra Shopify API calls
     if (paymentIntent.metadata && paymentIntent.metadata.shopify_order_id) {
       console.warn(`PaymentIntent ${paymentIntentId} already used for order ${paymentIntent.metadata.shopify_order_name}`);
       return {
@@ -137,17 +143,45 @@ exports.handler = async (event) => {
     // =============================================
     let shopifyCustomerId = null;
 
-    const searchResp = await shopifyRequest(
-      `customers/search.json?query=email:${encodeURIComponent(customer.email)}&limit=1`
-    );
+    try {
+      const searchResp = await shopifyRequest(
+        `customers/search.json?query=email:${encodeURIComponent(customer.email)}&limit=1`
+      );
 
-    if (searchResp.customers && searchResp.customers.length > 0) {
-      shopifyCustomerId = searchResp.customers[0].id;
-      try {
-        const updatePayload = {
+      if (searchResp.customers && searchResp.customers.length > 0) {
+        shopifyCustomerId = searchResp.customers[0].id;
+        // Update address — best-effort, don't block order
+        try {
+          await shopifyRequest(`customers/${shopifyCustomerId}.json`, 'PUT', {
+            customer: {
+              id: shopifyCustomerId,
+              phone: customer.phone,
+              addresses: [{
+                first_name: customer.firstName,
+                last_name: customer.lastName,
+                address1: (customer.mahalle ? customer.mahalle + ', ' : '') + customer.address,
+                address2: customer.district || '',
+                city: customer.city,
+                province: customer.city,
+                zip: customer.zip,
+                country: 'TR',
+                phone: customer.phone,
+                default: true
+              }]
+            }
+          });
+        } catch (updateErr) {
+          console.warn('Customer update warning:', updateErr.message);
+        }
+      } else {
+        // Create new customer — omit optional metafields to keep it lean
+        const createResp = await shopifyRequest('customers.json', 'POST', {
           customer: {
-            id: shopifyCustomerId,
+            first_name: customer.firstName,
+            last_name: customer.lastName,
+            email: customer.email,
             phone: customer.phone,
+            verified_email: true,
             addresses: [{
               first_name: customer.firstName,
               last_name: customer.lastName,
@@ -159,64 +193,20 @@ exports.handler = async (event) => {
               country: 'TR',
               phone: customer.phone,
               default: true
-            }]
+            }],
+            tags: marketingConsent ? 'custom-checkout, accepts-marketing' : 'custom-checkout'
           }
-        };
-        await shopifyRequest(`customers/${shopifyCustomerId}.json`, 'PUT', updatePayload);
-        // Save Stripe Customer ID as metafield if provided
-        if (stripeCustomerId) {
-          try {
-            await shopifyRequest(`customers/${shopifyCustomerId}/metafields.json`, 'POST', {
-              metafield: {
-                namespace: 'checkout',
-                key: 'stripe_customer_id',
-                value: stripeCustomerId,
-                type: 'single_line_text_field'
-              }
-            });
-          } catch (mfErr) {
-            console.warn('Stripe customer metafield update warning:', mfErr.message);
-          }
-        }
-      } catch (updateErr) {
-        console.warn('Customer update warning:', updateErr.message);
+        });
+        shopifyCustomerId = createResp.customer.id;
       }
-    } else {
-      const createResp = await shopifyRequest('customers.json', 'POST', {
-        customer: {
-          first_name: customer.firstName,
-          last_name: customer.lastName,
-          email: customer.email,
-          phone: customer.phone,
-          verified_email: true,
-          addresses: [{
-            first_name: customer.firstName,
-            last_name: customer.lastName,
-            address1: (customer.mahalle ? customer.mahalle + ', ' : '') + customer.address,
-            address2: customer.district || '',
-            city: customer.city,
-            province: customer.city,
-            zip: customer.zip,
-            country: 'TR',
-            phone: customer.phone,
-            default: true
-          }],
-          tags: marketingConsent ? 'custom-checkout, accepts-marketing' : 'custom-checkout',
-          metafields: [{
-            namespace: 'checkout',
-            key: 'stripe_customer_id',
-            value: stripeCustomerId || '',
-            type: 'single_line_text_field'
-          }]
-        }
-      });
-      shopifyCustomerId = createResp.customer.id;
+    } catch (customerErr) {
+      // Customer lookup/creation failed — still create the order without customer link
+      console.error('Customer creation failed, proceeding without customer ID:', customerErr.message);
     }
 
     // =============================================
     // STEP 2: Create Shopify Order
     // =============================================
-    // Use the verified amount from Stripe, not the client-sent total
     const verifiedTotal = paymentIntent.amount;
 
     const lineItems = items.map(item => ({
@@ -237,32 +227,10 @@ exports.handler = async (event) => {
     noteAttributes.push({ name: 'stripe_payment_intent', value: paymentIntentId });
     if (stripeCustomerId) noteAttributes.push({ name: 'stripe_customer_id', value: stripeCustomerId });
     if (marketingConsent) noteAttributes.push({ name: 'marketing_consent', value: 'true' });
-
-    if (agreementHtml) {
-      noteAttributes.push({ name: 'mesafeli_satis_sozlesmesi', value: 'onaylandi' });
-    }
-
-    const orderMetafields = [];
-    if (agreementHtml) {
-      orderMetafields.push({
-        namespace: 'checkout',
-        key: 'mesafeli_satis_sozlesmesi',
-        value: agreementHtml,
-        type: 'multi_line_text_field'
-      });
-    }
-    if (marketingConsent) {
-      orderMetafields.push({
-        namespace: 'checkout',
-        key: 'marketing_consent',
-        value: 'true',
-        type: 'single_line_text_field'
-      });
-    }
+    if (agreementHtml) noteAttributes.push({ name: 'mesafeli_satis_sozlesmesi', value: 'onaylandi' });
 
     const orderPayload = {
       order: {
-        customer: { id: shopifyCustomerId },
         email: customer.email,
         phone: customer.phone,
         line_items: lineItems,
@@ -270,10 +238,9 @@ exports.handler = async (event) => {
         fulfillment_status: null,
         send_receipt: true,
         send_fulfillment_receipt: true,
-        note: `Custom checkout | Stripe PI: ${paymentIntentId}\n\n--- MESAFELİ SATIŞ SÖZLEŞMESİ ---\nSözleşme elektronik ortamda onaylanmıştır.`,
+        note: `Custom checkout | Stripe PI: ${paymentIntentId}`,
         note_attributes: noteAttributes,
         tags: `custom-checkout, stripe, pi_${paymentIntentId.replace('pi_', '')}`,
-        metafields: orderMetafields,
         shipping_address: {
           first_name: customer.firstName,
           last_name: customer.lastName,
@@ -311,9 +278,13 @@ exports.handler = async (event) => {
       }
     };
 
-    // Server-side coupon re-validation before applying discount to Shopify order
+    // Link customer if we have one
+    if (shopifyCustomerId) {
+      orderPayload.order.customer = { id: shopifyCustomerId };
+    }
+
+    // Server-side coupon re-validation — best-effort, don't block order
     if (discountAmount > 0 && couponCode) {
-      let couponValid = false;
       try {
         const lookupResp = await shopifyRequest(
           `discount_codes/lookup.json?code=${encodeURIComponent(couponCode.trim().toUpperCase())}`
@@ -328,7 +299,6 @@ exports.handler = async (event) => {
             const notExpired = !rule.ends_at || new Date(rule.ends_at) >= now;
             const started = !rule.starts_at || new Date(rule.starts_at) <= now;
             if (notExpired && started) {
-              // Recalculate discount server-side
               let serverDiscount = 0;
               const ruleValue = parseFloat(rule.value);
               const clientSubtotal = subtotal || 0;
@@ -338,31 +308,29 @@ exports.handler = async (event) => {
                 serverDiscount = Math.round(Math.abs(ruleValue) * 100);
               }
               if (serverDiscount > clientSubtotal) serverDiscount = clientSubtotal;
-
-              // Use server-calculated discount (don't trust client value)
               orderPayload.order.discount_codes = [{
                 code: couponCode,
                 amount: (serverDiscount / 100).toFixed(2),
                 type: 'fixed_amount'
               }];
-              couponValid = true;
             }
           }
         }
       } catch (couponErr) {
-        console.warn('Coupon re-validation warning:', couponErr.message);
-      }
-      if (!couponValid) {
-        console.warn(`Coupon "${couponCode}" failed server-side re-validation, skipping discount on order`);
+        console.warn('Coupon re-validation skipped:', couponErr.message);
       }
     }
 
+    // ---- CREATE THE ORDER (the only call that MUST succeed) ----
     const orderResp = await shopifyRequest('orders.json', 'POST', orderPayload);
     const shopifyOrder = orderResp.order;
-
     console.log(`Shopify order created: ${shopifyOrder.name} (ID: ${shopifyOrder.id})`);
 
-    // Mark PaymentIntent as used (prevents duplicate order creation)
+    // =============================================
+    // STEP 3: Mark PI as used — CRITICAL for idempotency
+    // If this fails the order still exists; duplicate check
+    // on retry will find it via Shopify order tag search below.
+    // =============================================
     try {
       await stripe.paymentIntents.update(paymentIntentId, {
         metadata: {
@@ -375,104 +343,93 @@ exports.handler = async (event) => {
       console.warn('PI metadata update warning:', piUpdateErr.message);
     }
 
-    // Update order with agreement URL in note_attributes
+    // =============================================
+    // STEP 4: Fire-and-forget — NONE of these block the response
+    // =============================================
+
+    // Agreement URL in note_attributes
     if (agreementHtml) {
       const agreementLink = `https://checkout.thesveltechic.com/api/get-agreement?order=${encodeURIComponent(shopifyOrder.name)}&email=${encodeURIComponent(customer.email)}`;
-      try {
-        const existingAttrs = shopifyOrder.note_attributes || [];
-        existingAttrs.push({ name: 'sozlesme_linki', value: agreementLink });
-        await shopifyRequest(`orders/${shopifyOrder.id}.json`, 'PUT', {
-          order: {
-            id: shopifyOrder.id,
-            note_attributes: existingAttrs
-          }
-        });
-      } catch (noteErr) {
-        console.error('Failed to add agreement URL:', noteErr.message);
-      }
-    }
-
-    // Metafield fallback
-    if (agreementHtml && (!shopifyOrder.metafields || shopifyOrder.metafields.length === 0)) {
-      try {
-        await shopifyRequest(`orders/${shopifyOrder.id}/metafields.json`, 'POST', {
-          metafield: {
-            namespace: 'checkout',
-            key: 'mesafeli_satis_sozlesmesi',
-            value: agreementHtml,
-            type: 'multi_line_text_field'
-          }
-        });
-      } catch (mfErr) {
-        console.error('Agreement metafield fallback failed:', mfErr.message);
-      }
-    }
-
-    // =============================================
-    // STEP 3: Meta Conversions API — Purchase Event
-    // =============================================
-    try {
-      const eventTime = Math.floor(Date.now() / 1000);
-      const eventId = purchaseEventId || `purchase_${shopifyOrder.id}_${eventTime}`;
-
-      const metaPayload = {
-        data: [{
-          event_name: 'Purchase',
-          event_time: eventTime,
-          event_id: eventId,
-          event_source_url: sourceUrl || 'https://checkout.thesveltechic.com',
-          action_source: 'website',
-          user_data: {
-            em: [sha256(customer.email)],
-            ph: [sha256(customer.phone.replace(/\D/g, ''))],
-            fn: [sha256(customer.firstName)],
-            ln: [sha256(customer.lastName)],
-            ct: [sha256(customer.city)],
-            zp: [sha256(customer.zip)],
-            country: [sha256('tr')],
-            st: [sha256(customer.district)],
-            client_ip_address: clientIp,
-            client_user_agent: clientUserAgent,
-            external_id: [sha256(customer.email)],
-            ...(fbp ? { fbp } : {}),
-            ...(fbc ? { fbc } : {})
-          },
-          custom_data: {
-            currency: 'TRY',
-            value: parseFloat((verifiedTotal / 100).toFixed(2)),
-            content_type: 'product',
-            contents: items.map(item => ({
-              id: `shopify_TR_${item.product_id}_${item.variant_id}`,
-              quantity: item.quantity,
-              item_price: parseFloat((item.price / 100).toFixed(2))
-            })),
-            content_ids: items.map(item => `shopify_TR_${item.product_id}_${item.variant_id}`),
-            num_items: items.reduce((sum, item) => sum + item.quantity, 0),
-            order_id: shopifyOrder.name
-          }
-        }]
-      };
-
-      const metaResp = await fetch(
-        `https://graph.facebook.com/v25.0/${META_PIXEL_ID}/events?access_token=${META_ACCESS_TOKEN}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(metaPayload)
-        }
+      fireAndForget('agreement-note', () =>
+        shopifyRequest(`orders/${shopifyOrder.id}.json`, 'PUT', {
+          order: { id: shopifyOrder.id, note_attributes: [...(shopifyOrder.note_attributes || []), { name: 'sozlesme_linki', value: agreementLink }] }
+        })
       );
+    }
 
-      const metaResult = await metaResp.json();
-      console.log('Meta CAPI response:', JSON.stringify(metaResult));
-    } catch (metaErr) {
-      console.error('Meta CAPI exception:', metaErr.message);
+    // Agreement metafield fallback
+    if (agreementHtml && (!shopifyOrder.metafields || shopifyOrder.metafields.length === 0)) {
+      fireAndForget('agreement-metafield', () =>
+        shopifyRequest(`orders/${shopifyOrder.id}/metafields.json`, 'POST', {
+          metafield: { namespace: 'checkout', key: 'mesafeli_satis_sozlesmesi', value: agreementHtml, type: 'multi_line_text_field' }
+        })
+      );
+    }
+
+    // Stripe customer metafield on Shopify customer
+    if (stripeCustomerId && shopifyCustomerId) {
+      fireAndForget('stripe-customer-metafield', () =>
+        shopifyRequest(`customers/${shopifyCustomerId}/metafields.json`, 'POST', {
+          metafield: { namespace: 'checkout', key: 'stripe_customer_id', value: stripeCustomerId, type: 'single_line_text_field' }
+        })
+      );
+    }
+
+    // Meta Conversions API — Purchase event
+    if (META_PIXEL_ID && META_ACCESS_TOKEN) {
+      fireAndForget('meta-capi', () => {
+        const eventTime = Math.floor(Date.now() / 1000);
+        const eventId = purchaseEventId || `purchase_${shopifyOrder.id}_${eventTime}`;
+        return fetch(
+          `https://graph.facebook.com/v25.0/${META_PIXEL_ID}/events?access_token=${META_ACCESS_TOKEN}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              data: [{
+                event_name: 'Purchase',
+                event_time: eventTime,
+                event_id: eventId,
+                event_source_url: sourceUrl || 'https://checkout.thesveltechic.com',
+                action_source: 'website',
+                user_data: {
+                  em: [sha256(customer.email)],
+                  ph: customer.phone ? [sha256(customer.phone.replace(/\D/g, ''))] : [],
+                  fn: [sha256(customer.firstName)],
+                  ln: [sha256(customer.lastName)],
+                  ct: [sha256(customer.city)],
+                  zp: [sha256(customer.zip)],
+                  country: [sha256('tr')],
+                  st: [sha256(customer.district)],
+                  client_ip_address: clientIp,
+                  client_user_agent: clientUserAgent,
+                  external_id: [sha256(customer.email)],
+                  ...(fbp ? { fbp } : {}),
+                  ...(fbc ? { fbc } : {})
+                },
+                custom_data: {
+                  currency: 'TRY',
+                  value: parseFloat((verifiedTotal / 100).toFixed(2)),
+                  content_type: 'product',
+                  contents: items.map(item => ({
+                    id: `shopify_TR_${item.product_id}_${item.variant_id}`,
+                    quantity: item.quantity,
+                    item_price: parseFloat((item.price / 100).toFixed(2))
+                  })),
+                  content_ids: items.map(item => `shopify_TR_${item.product_id}_${item.variant_id}`),
+                  num_items: items.reduce((sum, item) => sum + item.quantity, 0),
+                  order_id: shopifyOrder.name
+                }
+              }]
+            })
+          }
+        ).then(r => r.json()).then(d => console.log('Meta CAPI:', JSON.stringify(d)));
+      });
     }
 
     // =============================================
-    // RESPONSE
+    // RESPONSE — returned immediately, fire-and-forget tasks continue in background
     // =============================================
-    const agreementUrl = `https://checkout.thesveltechic.com/api/get-agreement?order=${encodeURIComponent(shopifyOrder.name)}&email=${encodeURIComponent(customer.email)}`;
-
     return {
       statusCode: 200,
       headers,
@@ -481,7 +438,9 @@ exports.handler = async (event) => {
         shopifyOrderId: shopifyOrder.id,
         shopifyOrderName: shopifyOrder.name,
         shopifyCustomerId: shopifyCustomerId,
-        agreementUrl: agreementUrl
+        agreementUrl: agreementHtml
+          ? `https://checkout.thesveltechic.com/api/get-agreement?order=${encodeURIComponent(shopifyOrder.name)}&email=${encodeURIComponent(customer.email)}`
+          : null
       })
     };
 

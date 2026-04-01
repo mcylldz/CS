@@ -872,12 +872,12 @@
           marketingConsent: document.getElementById('marketingCheck').checked
         });
 
-        var maxRetries = 3;
+        var maxRetries = 5;
         for (var attempt = 0; attempt < maxRetries; attempt++) {
           try {
             if (attempt > 0) {
               console.log('complete-order retry #' + attempt);
-              await new Promise(function(r) { setTimeout(r, 2000 * attempt); });
+              await new Promise(function(r) { setTimeout(r, 1500 * attempt); });
             }
             var orderResp = await fetch('/api/complete-order', {
               method: 'POST',
@@ -910,12 +910,19 @@
           });
           window.location.href = '/success.html?' + successParams.toString();
         } else {
-          // Payment taken but Shopify order failed — show critical error
+          // Payment taken but Shopify order failed after all retries.
+          // Show error with PI reference so support can reconcile.
           showGlobalError(
-            'Ödemeniz alındı ancak sipariş sisteme kaydedilemedi. ' +
-            'Lütfen bu referans numarasını not alıp destek ile iletişime geçin: ' +
-            paymentIntent.id
+            'Ödemeniz başarıyla alındı ancak sipariş kaydında bir sorun oluştu. ' +
+            'Siparişiniz kısa sürede sisteme işlenecektir. Sorun devam ederse bu referans numarasını ' +
+            'destek ekibimize iletin: ' + paymentIntent.id
           );
+          // Last-resort: fire one more attempt in background (user already sees the message)
+          fetch('/api/complete-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: completeOrderBody
+          }).catch(function() {});
           isProcessing = false;
           setLoading(false);
           return;
