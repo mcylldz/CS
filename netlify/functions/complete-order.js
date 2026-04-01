@@ -243,8 +243,18 @@ exports.handler = async (event) => {
       orderPayload.order.customer = { id: shopifyCustomerId };
     }
 
-    // ---- Coupon: validate and include in order payload ----
+    // ---- Coupon: always include in order payload first (client value) ----
+    // Then try server validation to upgrade it. If validation fails/times out,
+    // order still has the discount the customer actually paid.
     if (discountAmount > 0 && couponCode) {
+      // Fallback: use client-sent discount (already validated at payment time by create-payment)
+      orderPayload.order.discount_codes = [{
+        code: couponCode,
+        amount: (discountAmount / 100).toFixed(2),
+        type: 'fixed_amount'
+      }];
+
+      // Try server re-validation to get exact Shopify-side amount
       try {
         const lookupResp = await shopifyRequest(
           `discount_codes/lookup.json?code=${encodeURIComponent(couponCode.trim().toUpperCase())}`
@@ -268,6 +278,7 @@ exports.handler = async (event) => {
                 serverDiscount = Math.round(Math.abs(ruleValue) * 100);
               }
               if (serverDiscount > clientSubtotal) serverDiscount = clientSubtotal;
+              // Upgrade to server-validated amount
               orderPayload.order.discount_codes = [{
                 code: couponCode,
                 amount: (serverDiscount / 100).toFixed(2),
@@ -277,14 +288,8 @@ exports.handler = async (event) => {
           }
         }
       } catch (couponErr) {
-        // Coupon validation failed — still include discount from client as fallback
-        // so the order total matches what the customer paid
         console.warn('Coupon server validation failed, using client discount:', couponErr.message);
-        orderPayload.order.discount_codes = [{
-          code: couponCode,
-          amount: (discountAmount / 100).toFixed(2),
-          type: 'fixed_amount'
-        }];
+        // orderPayload.order.discount_codes already set above — order proceeds with client value
       }
     }
 
@@ -295,18 +300,23 @@ exports.handler = async (event) => {
 
     // =============================================
     // STEP 3: Add agreement link to note_attributes (needs order name)
-    // This is the ONE extra Shopify call we await after order creation.
+    // The agreement HTML itself is already in the order metafield (atomic).
+    // This link is for convenience — retry once if it fails.
     // =============================================
     if (agreementHtml) {
       const agreementLink = `https://checkout.thesveltechic.com/api/get-agreement?order=${encodeURIComponent(shopifyOrder.name)}&email=${encodeURIComponent(customer.email)}`;
+      const existingAttrs = shopifyOrder.note_attributes || [];
+      existingAttrs.push({ name: 'sozlesme_linki', value: agreementLink });
+      const notePayload = { order: { id: shopifyOrder.id, note_attributes: existingAttrs } };
       try {
-        const existingAttrs = shopifyOrder.note_attributes || [];
-        existingAttrs.push({ name: 'sozlesme_linki', value: agreementLink });
-        await shopifyRequest(`orders/${shopifyOrder.id}.json`, 'PUT', {
-          order: { id: shopifyOrder.id, note_attributes: existingAttrs }
-        });
+        await shopifyRequest(`orders/${shopifyOrder.id}.json`, 'PUT', notePayload);
       } catch (noteErr) {
-        console.warn('Agreement link update warning:', noteErr.message);
+        console.warn('Agreement link first attempt failed, retrying:', noteErr.message);
+        try {
+          await shopifyRequest(`orders/${shopifyOrder.id}.json`, 'PUT', notePayload);
+        } catch (retryErr) {
+          console.error('Agreement link retry also failed:', retryErr.message);
+        }
       }
     }
 
