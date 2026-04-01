@@ -67,7 +67,7 @@ function sleep(ms) {
  */
 async function shopifyRequest(endpoint, method = 'GET', data = null, retries = 5) {
   const token = await getShopifyToken();
-  const API_VERSION = '2024-10';
+  const API_VERSION = '2026-04';
 
   const opts = {
     method,

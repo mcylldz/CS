@@ -624,11 +624,13 @@
     // Legal agreement links
     document.getElementById('openAgreement').addEventListener('click', function(e) {
       e.preventDefault();
+      e.stopPropagation();
       document.getElementById('agreementBody').innerHTML = generateAgreementHtml();
       document.getElementById('agreementOverlay').classList.add('sc-open');
     });
     document.getElementById('openMarketing').addEventListener('click', function(e) {
       e.preventDefault();
+      e.stopPropagation();
       document.getElementById('marketingBody').innerHTML = generateMarketingHtml();
       document.getElementById('marketingOverlay').classList.add('sc-open');
     });

@@ -11,7 +11,7 @@ const ALLOWED_ORIGIN = process.env.CHECKOUT_ORIGIN || 'https://checkout.thesvelt
 
 function corsHeaders(origin) {
   return {
-    'Access-Control-Allow-Origin': origin === ALLOWED_ORIGIN ? ALLOWED_ORIGIN : ALLOWED_ORIGIN,
+    'Access-Control-Allow-Origin': origin === ALLOWED_ORIGIN ? origin : '',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Content-Type': 'application/json'
