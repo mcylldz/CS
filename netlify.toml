@@ -18,5 +18,5 @@
     Referrer-Policy = "strict-origin-when-cross-origin"
     X-XSS-Protection = "1; mode=block"
     Strict-Transport-Security = "max-age=31536000; includeSubDomains"
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://js.stripe.com https://connect.facebook.net https://mc.yandex.ru; frame-src https://js.stripe.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://*.shopify.com https://*.shopifycdn.com https://mc.yandex.ru; connect-src 'self' https://api.stripe.com https://*.facebook.com https://mc.yandex.ru"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://js.stripe.com https://connect.facebook.net https://mc.yandex.ru https://yastatic.net; frame-src https://js.stripe.com blob: https://mc.yandex.ru; child-src blob: https://mc.yandex.ru; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://*.shopify.com https://*.shopifycdn.com https://mc.yandex.ru; connect-src 'self' https://api.stripe.com https://*.facebook.com https://mc.yandex.ru"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
