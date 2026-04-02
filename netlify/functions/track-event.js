@@ -27,6 +27,15 @@ function sha256(value) {
   return crypto.createHash('sha256').update(value.trim().toLowerCase()).digest('hex');
 }
 
+function normalizePhone(phone) {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('90') && digits.length === 12) return digits;
+  if (digits.startsWith('0') && digits.length === 11) return '9' + digits;
+  if (digits.length === 10 && digits.startsWith('5')) return '90' + digits;
+  return digits;
+}
+
 exports.handler = async (event) => {
   const origin = event.headers.origin || '';
   const headers = corsHeaders(origin);
@@ -85,7 +94,7 @@ exports.handler = async (event) => {
         userData.em = [sha256(customer.email)];
         userData.external_id = [sha256(customer.email)];
       }
-      if (customer.phone) userData.ph = [sha256(customer.phone.replace(/\D/g, ''))];
+      if (customer.phone) userData.ph = [sha256(normalizePhone(customer.phone))];
       if (customer.firstName) userData.fn = [sha256(customer.firstName)];
       if (customer.lastName) userData.ln = [sha256(customer.lastName)];
       if (customer.city) userData.ct = [sha256(customer.city)];

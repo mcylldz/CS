@@ -44,6 +44,15 @@ function sha256(value) {
   return crypto.createHash('sha256').update(value.trim().toLowerCase()).digest('hex');
 }
 
+function normalizePhone(phone) {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('90') && digits.length === 12) return digits;
+  if (digits.startsWith('0') && digits.length === 11) return '9' + digits;
+  if (digits.length === 10 && digits.startsWith('5')) return '90' + digits;
+  return digits;
+}
+
 // ---- Fire-and-forget: only for non-Shopify tasks (Stripe metadata, Meta CAPI) ----
 function fireAndForget(label, fn) {
   try { fn().catch(err => console.warn(`[fire-and-forget] ${label}:`, err.message)); }
@@ -367,7 +376,7 @@ exports.handler = async (event) => {
                 action_source: 'website',
                 user_data: {
                   em: [sha256(customer.email)],
-                  ph: customer.phone ? [sha256(customer.phone.replace(/\D/g, ''))] : [],
+                  ph: customer.phone ? [sha256(normalizePhone(customer.phone))] : [],
                   fn: [sha256(customer.firstName)],
                   ln: [sha256(customer.lastName)],
                   ct: [sha256(customer.city)],
@@ -391,7 +400,8 @@ exports.handler = async (event) => {
                   })),
                   content_ids: items.map(item => `shopify_TR_${item.product_id}_${item.variant_id}`),
                   num_items: items.reduce((sum, item) => sum + item.quantity, 0),
-                  order_id: shopifyOrder.name
+                  order_id: shopifyOrder.name,
+                  transaction_id: paymentIntentId
                 }
               }]
             })

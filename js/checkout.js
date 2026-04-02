@@ -32,6 +32,10 @@
   const fbp = getCookie('_fbp') || params.get('fbp') || '';
   var fbclid = params.get('fbclid') || '';
   const fbc = getCookie('_fbc') || params.get('fbc') || (fbclid ? ('fb.1.' + Date.now() + '.' + fbclid) : '');
+
+  // Store fbp/fbc for pixel re-use across page lifecycle
+  if (fbp) { try { document.cookie = '_fbp=' + fbp + '; path=/; max-age=7776000; SameSite=Lax'; } catch(e) {} }
+  if (fbc) { try { document.cookie = '_fbc=' + fbc + '; path=/; max-age=7776000; SameSite=Lax'; } catch(e) {} }
   const utmSource = params.get('utm_source') || '';
   const utmMedium = params.get('utm_medium') || '';
   const utmCampaign = params.get('utm_campaign') || '';
@@ -40,6 +44,16 @@
 
   // ---- Init ----
   document.addEventListener('DOMContentLoaded', init);
+
+  // ---- Phone Normalize (Turkey: 905xxxxxxxxx) ----
+  function normalizePhone(phone) {
+    if (!phone) return '';
+    var digits = phone.replace(/\D/g, '');
+    if (digits.startsWith('90') && digits.length === 12) return digits;
+    if (digits.startsWith('0') && digits.length === 11) return '9' + digits;
+    if (digits.length === 10 && digits.startsWith('5')) return '90' + digits;
+    return digits;
+  }
 
   // ---- Yandex Metrica Helpers ----
   var YM_ID = 108350862;
@@ -369,7 +383,7 @@
     var fnVal = val('firstName');
     var lnVal = val('lastName');
     if (emailVal) advancedMatchData.em = emailVal.toLowerCase().trim();
-    if (phoneVal) advancedMatchData.ph = phoneVal.replace(/\D/g, '');
+    if (phoneVal) advancedMatchData.ph = normalizePhone(phoneVal);
     if (fnVal) advancedMatchData.fn = fnVal.toLowerCase().trim();
     if (lnVal) advancedMatchData.ln = lnVal.toLowerCase().trim();
 
@@ -400,7 +414,7 @@
     if (!metaPixelReady || typeof fbq === 'undefined') return;
     var userData = {};
     if (customer.email) userData.em = customer.email.toLowerCase().trim();
-    if (customer.phone) userData.ph = customer.phone.replace(/\D/g, '');
+    if (customer.phone) userData.ph = normalizePhone(customer.phone);
     if (customer.firstName) userData.fn = customer.firstName.toLowerCase().trim();
     if (customer.lastName) userData.ln = customer.lastName.toLowerCase().trim();
     if (customer.city) userData.ct = customer.city.toLowerCase().trim();
