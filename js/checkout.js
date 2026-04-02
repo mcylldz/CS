@@ -96,6 +96,18 @@
   function parseCart() {
     const cartParam = params.get('cart');
     if (!cartParam) {
+      // Try sessionStorage fallback (e.g. page refresh in Instagram WebView)
+      try {
+        var saved = sessionStorage.getItem('sc_cart');
+        if (saved) {
+          var data = JSON.parse(saved);
+          if (Array.isArray(data) && data.length > 0) {
+            cartItems = data;
+            subtotal = cartItems.reduce((sum, item) => sum + item.line_price, 0);
+            return;
+          }
+        }
+      } catch(e) {}
       showGlobalError('Sepet bilgisi bulunamadı. Lütfen mağazaya geri dönün.');
       return;
     }
@@ -106,6 +118,8 @@
       if (Array.isArray(data) && data.length > 0) {
         cartItems = data;
         subtotal = cartItems.reduce((sum, item) => sum + item.line_price, 0);
+        // Save to sessionStorage for page refresh resilience
+        try { sessionStorage.setItem('sc_cart', JSON.stringify(data)); } catch(e) {}
       } else {
         showGlobalError('Sepetiniz boş görünüyor.');
       }
@@ -226,25 +240,29 @@
     });
   }
 
-  // ---- Load Address Data ----
+  // ---- Load Address Data (Lazy Loading) ----
+  var provinceSlugs = null; // { "Adana": "adana", "İstanbul": "istanbul", ... }
+  var loadedProvinceData = {}; // Cache: { "İstanbul": { ilçe: [mahalle, ...] } }
+
   function loadAddressData() {
-    fetch('/data/adresler.json')
+    // Only load province list (~1.7 KB instead of 2.5 MB)
+    fetch('/data/provinces.json')
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        addressData = data;
+        provinceSlugs = data;
+        addressData = {}; // Keep for backward compat with validation
         populateProvinces();
       })
       .catch(function(err) {
-        console.error('Address data load error:', err);
+        console.error('Province list load error:', err);
       });
   }
 
   function populateProvinces() {
     var citySelect = document.getElementById('city');
-    if (!addressData || !citySelect) return;
+    if (!provinceSlugs || !citySelect) return;
 
-    // Sort provinces alphabetically in Turkish
-    var provinces = Object.keys(addressData).sort(function(a, b) {
+    var provinces = Object.keys(provinceSlugs).sort(function(a, b) {
       return a.localeCompare(b, 'tr');
     });
 
@@ -262,12 +280,41 @@
     var mahalleSelect = document.getElementById('mahalle');
 
     // Reset district and mahalle
-    districtSelect.innerHTML = '<option value="">İlçe seçiniz</option>';
-    districtSelect.disabled = false;
+    districtSelect.innerHTML = '<option value="">İlçe yükleniyor...</option>';
+    districtSelect.disabled = true;
     mahalleSelect.innerHTML = '<option value="">Önce ilçe seçiniz</option>';
     mahalleSelect.disabled = true;
 
-    if (!il || !addressData || !addressData[il]) return;
+    if (!il || !provinceSlugs || !provinceSlugs[il]) return;
+
+    // Check cache first
+    if (loadedProvinceData[il]) {
+      addressData[il] = loadedProvinceData[il];
+      renderDistricts(il);
+      return;
+    }
+
+    // Lazy load province data (~26 KB average per province)
+    var slug = provinceSlugs[il];
+    fetch('/data/iller/' + slug + '.json')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        loadedProvinceData[il] = data;
+        addressData[il] = data;
+        renderDistricts(il);
+      })
+      .catch(function(err) {
+        console.error('District data load error for ' + il + ':', err);
+        districtSelect.innerHTML = '<option value="">İlçe yüklenemedi</option>';
+      });
+  }
+
+  function renderDistricts(il) {
+    var districtSelect = document.getElementById('district');
+    districtSelect.innerHTML = '<option value="">İlçe seçiniz</option>';
+    districtSelect.disabled = false;
+
+    if (!addressData[il]) return;
 
     var districts = Object.keys(addressData[il]).sort(function(a, b) {
       return a.localeCompare(b, 'tr');

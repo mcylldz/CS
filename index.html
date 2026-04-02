@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Ödeme – Svelte Chic</title>
   <link rel="stylesheet" href="/css/checkout.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -44,16 +44,17 @@
         </div>
 
         <!-- ============ STEP 1: Contact + Address + Shipping ============ -->
+        <form id="checkoutForm" autocomplete="on" novalidate>
         <div id="step1Panel" class="sc-step-panel sc-step-panel-active">
           <!-- Contact Section -->
           <section class="sc-section">
             <h2 class="sc-section-title">İletişim Bilgileri</h2>
             <div class="sc-field">
-              <input type="email" id="email" class="sc-input" placeholder=" " required autocomplete="email">
+              <input type="email" id="email" name="email" class="sc-input" placeholder=" " required autocomplete="email">
               <label for="email" class="sc-label">E-posta adresi</label>
             </div>
             <div class="sc-field">
-              <input type="tel" id="phone" class="sc-input" placeholder=" " required autocomplete="tel">
+              <input type="tel" id="phone" name="phone" class="sc-input" placeholder=" " required autocomplete="tel">
               <label for="phone" class="sc-label">Telefon numarası</label>
             </div>
           </section>
@@ -63,11 +64,11 @@
             <h2 class="sc-section-title">Teslimat Adresi</h2>
             <div class="sc-row sc-row-persist">
               <div class="sc-field sc-half">
-                <input type="text" id="firstName" class="sc-input" placeholder=" " required autocomplete="given-name">
+                <input type="text" id="firstName" name="given-name" class="sc-input" placeholder=" " required autocomplete="given-name">
                 <label for="firstName" class="sc-label">Ad</label>
               </div>
               <div class="sc-field sc-half">
-                <input type="text" id="lastName" class="sc-input" placeholder=" " required autocomplete="family-name">
+                <input type="text" id="lastName" name="family-name" class="sc-input" placeholder=" " required autocomplete="family-name">
                 <label for="lastName" class="sc-label">Soyad</label>
               </div>
             </div>
@@ -76,7 +77,7 @@
             <div class="sc-row sc-row-persist">
               <div class="sc-field sc-half">
                 <div class="sc-select-wrap">
-                  <select id="city" class="sc-input sc-select" required>
+                  <select id="city" name="address-level1" class="sc-input sc-select" required autocomplete="address-level1">
                     <option value="">İl seçiniz</option>
                   </select>
                   <label for="city" class="sc-label sc-label-select">İl</label>
@@ -84,7 +85,7 @@
               </div>
               <div class="sc-field sc-half">
                 <div class="sc-select-wrap">
-                  <select id="district" class="sc-input sc-select" required disabled>
+                  <select id="district" name="address-level2" class="sc-input sc-select" required disabled autocomplete="address-level2">
                     <option value="">Önce il seçiniz</option>
                   </select>
                   <label for="district" class="sc-label sc-label-select">İlçe</label>
@@ -96,26 +97,26 @@
             <div class="sc-row sc-row-persist">
               <div class="sc-field sc-half">
                 <div class="sc-select-wrap">
-                  <select id="mahalle" class="sc-input sc-select" required disabled>
+                  <select id="mahalle" name="address-level3" class="sc-input sc-select" required disabled autocomplete="address-level3">
                     <option value="">Önce ilçe seçiniz</option>
                   </select>
                   <label for="mahalle" class="sc-label sc-label-select">Mahalle</label>
                 </div>
               </div>
               <div class="sc-field sc-half">
-                <input type="text" id="zip" class="sc-input" placeholder=" " autocomplete="postal-code" required>
+                <input type="text" id="zip" name="postal-code" class="sc-input" placeholder=" " autocomplete="postal-code" required>
                 <label for="zip" class="sc-label">Posta Kodu</label>
               </div>
             </div>
 
             <!-- Street Address -->
             <div class="sc-field">
-              <input type="text" id="address" class="sc-input" placeholder=" " required>
+              <input type="text" id="address" name="street-address" class="sc-input" placeholder=" " required autocomplete="street-address">
               <label for="address" class="sc-label">Cadde / Sokak, Apartman, Daire No</label>
             </div>
 
             <!-- Ülke (hidden, fixed TR) -->
-            <input type="hidden" id="country" value="TR">
+            <input type="hidden" id="country" name="country" value="TR" autocomplete="country">
           </section>
 
           <!-- Shipping info notice -->
@@ -202,6 +203,7 @@
           <!-- Error message -->
           <div id="globalError" class="sc-global-error" style="display:none;"></div>
         </div>
+        </form>
 
         <!-- Footer -->
         <div class="sc-footer-links">
