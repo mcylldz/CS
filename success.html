@@ -6,6 +6,18 @@
   <title>Sipariş Onayı – Svelte Chic</title>
   <link rel="stylesheet" href="/css/checkout.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Yandex.Metrika counter -->
+  <script type="text/javascript">
+    (function(m,e,t,r,i,k,a){
+      m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+      m[i].l=1*new Date();
+      for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+      k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+    })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=108350862', 'ym');
+    ym(108350862, 'init', {ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
+  </script>
+  <noscript><div><img src="https://mc.yandex.ru/watch/108350862" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
+  <!-- /Yandex.Metrika counter -->
   <style>
     .sc-success-wrap {
       max-width: 580px;
@@ -162,6 +174,24 @@
         var agreementUrl = '/api/get-agreement?order=' + encodeURIComponent(orderName) + '&email=' + encodeURIComponent(email);
         document.getElementById('agreementLink').href = agreementUrl;
         document.getElementById('agreementLinkWrap').style.display = 'block';
+      }
+
+      // Yandex Metrica: order success page goal
+      if (orderName) {
+        // Parse total from formatted string (e.g. "1.299,00TL" → 1299.00)
+        var numericTotal = 0;
+        if (total) {
+          numericTotal = parseFloat(total.replace(/\./g, '').replace(',', '.').replace('TL', '')) || 0;
+        }
+        try {
+          if (typeof ym !== 'undefined') {
+            ym(108350862, 'reachGoal', 'order_success_page', {
+              order_id: orderName,
+              order_price: numericTotal,
+              currency: 'TRY'
+            });
+          }
+        } catch (e) {}
       }
     })();
   </script>

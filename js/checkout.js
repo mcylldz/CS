@@ -41,6 +41,29 @@
   // ---- Init ----
   document.addEventListener('DOMContentLoaded', init);
 
+  // ---- Yandex Metrica Helpers ----
+  var YM_ID = 108350862;
+  window.dataLayer = window.dataLayer || [];
+
+  function ymGoal(goalName, params) {
+    try {
+      if (typeof ym !== 'undefined') ym(YM_ID, 'reachGoal', goalName, params || {});
+    } catch (e) { console.warn('YM goal error:', e); }
+  }
+
+  function ymProducts() {
+    return cartItems.map(function(item) {
+      return {
+        id: item.sku || String(item.variant_id),
+        name: item.title,
+        variant: item.variant_title || '',
+        price: item.price / 100,
+        quantity: item.quantity,
+        brand: 'Svelte Chic'
+      };
+    });
+  }
+
   function init() {
     parseCart();
     renderItems();
@@ -50,6 +73,23 @@
     bindEvents();
     // Meta CAPI: InitiateCheckout on page load
     fireInitiateCheckout();
+
+    // Yandex Metrica: product detail view + checkout_started goal
+    if (cartItems.length > 0) {
+      dataLayer.push({
+        ecommerce: {
+          currencyCode: 'TRY',
+          detail: {
+            products: ymProducts()
+          }
+        }
+      });
+      ymGoal('checkout_started', {
+        order_price: (subtotal - discountAmount) / 100,
+        currency: 'TRY',
+        num_items: cartItems.reduce(function(s, i) { return s + i.quantity; }, 0)
+      });
+    }
   }
 
   // ---- Parse Cart from URL ----
@@ -455,6 +495,22 @@
     // Update pixel with customer data for better Advanced Matching on this and future events
     updatePixelUserData(customer);
     fireMetaEvent('AddPaymentInfo', customer);
+
+    // Yandex Metrica: payment step reached
+    ymGoal('payment_step_reached', {
+      order_price: (subtotal - discountAmount) / 100,
+      currency: 'TRY',
+      customer_city: customer.city
+    });
+    dataLayer.push({
+      ecommerce: {
+        currencyCode: 'TRY',
+        checkout: {
+          actionField: { step: 2 },
+          products: ymProducts()
+        }
+      }
+    });
   }
 
   // ======== ABANDONED CHECKOUT ========
@@ -678,6 +734,14 @@
         document.getElementById('couponBtn').textContent = '✓';
         document.getElementById('couponBtn').disabled = true;
         updateTotals();
+
+        // Yandex Metrica: coupon applied
+        ymGoal('coupon_applied', {
+          coupon_code: code,
+          discount_amount: data.discount_amount / 100,
+          discount_type: data.discount_type || '',
+          order_price: (subtotal - data.discount_amount) / 100
+        });
       } else {
         msgEl.textContent = data.message || 'Geçersiz kupon kodu.';
         msgEl.className = 'sc-coupon-msg sc-error-msg';
@@ -847,6 +911,27 @@
           console.log('Meta Pixel [Purchase] eventID:', purchaseEventId);
         }
 
+        // Yandex Metrica: payment completed + ecommerce purchase
+        var ymTotal = (subtotal - discountAmount) / 100;
+        ymGoal('payment_completed', {
+          order_price: ymTotal,
+          currency: 'TRY',
+          payment_id: paymentIntent.id
+        });
+        dataLayer.push({
+          ecommerce: {
+            currencyCode: 'TRY',
+            purchase: {
+              actionField: {
+                id: paymentIntent.id,
+                revenue: ymTotal,
+                coupon: appliedCoupon || ''
+              },
+              products: ymProducts()
+            }
+          }
+        });
+
         // Step 3: Complete order (Shopify + Meta CAPI) — with retry
         var orderData = null;
         var completeOrderBody = JSON.stringify({
@@ -903,6 +988,13 @@
 
         // Step 4: Check result before redirecting
         if (orderData && (orderData.success || orderData.shopifyOrderName)) {
+          // Yandex Metrica: order completed
+          ymGoal('order_completed', {
+            order_id: orderData.shopifyOrderName || '',
+            order_price: (subtotal - discountAmount) / 100,
+            currency: 'TRY'
+          });
+
           var successParams = new URLSearchParams({
             order: orderData.shopifyOrderName || '',
             email: customerInfo.email,
