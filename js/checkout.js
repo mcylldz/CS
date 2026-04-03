@@ -338,12 +338,24 @@
 
     if (!il || !provinceSlugs || !provinceSlugs[il]) return;
 
-    // Check cache first
+    // Check memory cache first
     if (loadedProvinceData[il]) {
       addressData[il] = loadedProvinceData[il];
       renderDistricts(il);
       return;
     }
+
+    // Check sessionStorage cache (survives page refresh / app switch)
+    try {
+      var cached = sessionStorage.getItem('sc_province_' + il);
+      if (cached) {
+        var parsed = JSON.parse(cached);
+        loadedProvinceData[il] = parsed;
+        addressData[il] = parsed;
+        renderDistricts(il);
+        return;
+      }
+    } catch(e) {}
 
     // Lazy load province data (~26 KB average per province)
     var slug = provinceSlugs[il];
@@ -352,6 +364,8 @@
       .then(function(data) {
         loadedProvinceData[il] = data;
         addressData[il] = data;
+        // Persist to sessionStorage for page refresh resilience
+        try { sessionStorage.setItem('sc_province_' + il, JSON.stringify(data)); } catch(e) {}
         renderDistricts(il);
       })
       .catch(function(err) {
@@ -778,6 +792,47 @@
     inputs.forEach(function(input) {
       input.addEventListener('blur', function () {
         validateField(this);
+      });
+    });
+
+    // ---- Mobile viewport lock: prevent ALL zoom ----
+    // Block pinch-zoom gesture at document level
+    document.addEventListener('touchstart', function(e) {
+      if (e.touches.length > 1) e.preventDefault();
+    }, { passive: false });
+
+    // Block double-tap zoom
+    var lastTouchEnd = 0;
+    document.addEventListener('touchend', function(e) {
+      var now = Date.now();
+      if (now - lastTouchEnd <= 300) e.preventDefault();
+      lastTouchEnd = now;
+    }, { passive: false });
+
+    // Block ctrl+wheel zoom (desktop Instagram WebView edge case)
+    document.addEventListener('wheel', function(e) {
+      if (e.ctrlKey) e.preventDefault();
+    }, { passive: false });
+
+    // Continuously enforce viewport scale via visualViewport API
+    if (window.visualViewport) {
+      var vpMeta = document.querySelector('meta[name="viewport"]');
+      var resetViewport = function() {
+        if (window.visualViewport.scale !== 1 && vpMeta) {
+          vpMeta.setAttribute('content', 'width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no');
+        }
+      };
+      window.visualViewport.addEventListener('resize', resetViewport);
+      window.visualViewport.addEventListener('scroll', resetViewport);
+    }
+
+    // Scroll focused input into view after keyboard opens (no zoom, just scroll)
+    document.querySelectorAll('input, select, textarea').forEach(function(el) {
+      el.addEventListener('focus', function() {
+        var target = this;
+        setTimeout(function() {
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 300);
       });
     });
 
