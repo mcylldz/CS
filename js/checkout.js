@@ -82,11 +82,14 @@
     parseCart();
     renderItems();
     updateTotals();
-    initStripe();
     loadAddressData();
     bindEvents();
     // Meta CAPI: InitiateCheckout on page load
     fireInitiateCheckout();
+
+    // Defer Stripe.js loading to after first paint (non-blocking)
+    // User fills Step 1 while Stripe loads in background
+    setTimeout(initStripe, 0);
 
     // Yandex Metrica: product detail view + checkout_started goal
     if (cartItems.length > 0) {
@@ -189,15 +192,38 @@
     }
   }
 
+  // ---- Stripe.js Lazy Loader ----
+  var stripeScriptLoaded = false;
+  var stripeScriptPromise = null;
+
+  function loadStripeScript() {
+    if (stripeScriptPromise) return stripeScriptPromise;
+    stripeScriptPromise = new Promise(function(resolve, reject) {
+      if (window.Stripe) { stripeScriptLoaded = true; resolve(); return; }
+      var s = document.createElement('script');
+      s.src = 'https://js.stripe.com/v3/';
+      s.onload = function() { stripeScriptLoaded = true; resolve(); };
+      s.onerror = function() { reject(new Error('Stripe.js yüklenemedi')); };
+      document.head.appendChild(s);
+    });
+    return stripeScriptPromise;
+  }
+
   // ---- Stripe Init (Separate Fields) ----
   function initStripe() {
-    fetch('/api/create-payment', {
+    // Fetch key and load Stripe.js in parallel
+    var keyPromise = fetch('/api/create-payment', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'get_key' })
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
+    }).then(function(r) { return r.json(); });
+
+    var scriptPromise = loadStripeScript();
+
+    Promise.all([keyPromise, scriptPromise])
+    .then(function(results) {
+      var data = results[0];
+
       // Load Meta Pixel if pixel ID is available
       if (data.metaPixelId) {
         loadMetaPixel(data.metaPixelId);

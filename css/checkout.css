@@ -3,6 +3,8 @@
    ======================================== */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* Prevent double-tap zoom delay on all interactive elements */
+a, button, input, select, textarea, label { touch-action: manipulation; }
 
 html {
   overflow-x: hidden;
@@ -177,7 +179,7 @@ body {
 .sc-input {
   width: 100%;
   padding: 22px 14px 8px;
-  font-size: 14px;
+  font-size: 16px;
   font-family: var(--font);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -186,6 +188,8 @@ body {
   outline: none;
   transition: border-color 0.2s;
   min-height: 52px;
+  /* Prevent iOS Safari zoom on focus (requires >= 16px) */
+  touch-action: manipulation;
 }
 .sc-input:focus {
   border-color: var(--gold);
@@ -339,6 +343,7 @@ body {
   cursor: pointer;
   padding-top: 22px;
   min-height: 52px;
+  font-size: 16px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 14px center;
@@ -346,6 +351,7 @@ body {
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
+  touch-action: manipulation;
 }
 .sc-select:disabled {
   opacity: 0.6;
