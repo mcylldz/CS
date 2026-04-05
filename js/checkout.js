@@ -914,7 +914,7 @@
   // ---- Form Validation ----
   var fieldMessages = {
     email: 'Geçerli bir e-posta adresi girin.',
-    phone: 'Telefon numaranızı girin.',
+    phone: 'Geçerli bir telefon numarası girin (05XX XXX XXXX).',
     firstName: 'Adınızı girin.',
     lastName: 'Soyadınızı girin.',
     city: 'İl seçiniz.',
@@ -953,6 +953,16 @@
     if (el.id === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(el.value.trim())) {
       showFieldError(el, fieldMessages.email);
       return false;
+    }
+    if (el.id === 'phone') {
+      var phoneDigits = el.value.replace(/\D/g, '');
+      var isValidTR = (phoneDigits.startsWith('90') && phoneDigits.length === 12 && phoneDigits[2] === '5')
+        || (phoneDigits.startsWith('0') && phoneDigits.length === 11 && phoneDigits[1] === '5')
+        || (phoneDigits.startsWith('5') && phoneDigits.length === 10);
+      if (!isValidTR) {
+        showFieldError(el, fieldMessages.phone);
+        return false;
+      }
     }
     clearFieldError(el);
     return true;
@@ -1061,35 +1071,11 @@
         clearAbandonTimer();
         abandonSent = true;
 
-        // Browser-side Purchase event (CAPI fires from complete-order, uses same eventId pattern for dedup)
+        // Generate purchaseEventId early (needed in complete-order body for CAPI dedup)
         var purchaseEventId = 'purchase_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
-        if (metaPixelReady && typeof fbq !== 'undefined') {
-          var purchaseData = buildFbqCustomData();
-          purchaseData.transaction_id = paymentIntent.id;
-          fbq('track', 'Purchase', purchaseData, { eventID: purchaseEventId });
-          console.log('Meta Pixel [Purchase] eventID:', purchaseEventId);
-        }
 
-        // Yandex Metrica: payment completed + ecommerce purchase
-        var ymTotal = (subtotal - discountAmount) / 100;
-        ymGoal('payment_completed', {
-          order_price: ymTotal,
-          currency: 'TRY',
-          payment_id: paymentIntent.id
-        });
-        dataLayer.push({
-          ecommerce: {
-            currencyCode: 'TRY',
-            purchase: {
-              actionField: {
-                id: paymentIntent.id,
-                revenue: ymTotal,
-                coupon: appliedCoupon || ''
-              },
-              products: ymProducts()
-            }
-          }
-        });
+        // NOTE: Meta Pixel Purchase + Yandex purchase events are fired AFTER
+        // Shopify order is confirmed — prevents phantom conversions on failed orders.
 
         // Step 3: Complete order (Shopify + Meta CAPI) — with retry
         var orderData = null;
@@ -1147,10 +1133,41 @@
 
         // Step 4: Check result before redirecting
         if (orderData && (orderData.success || orderData.shopifyOrderName)) {
+          // Fire conversion events ONLY after confirmed Shopify order
+          var ymTotal = (subtotal - discountAmount) / 100;
+
+          // Meta Pixel Purchase (browser-side, CAPI fires from complete-order)
+          if (metaPixelReady && typeof fbq !== 'undefined') {
+            var purchaseData = buildFbqCustomData();
+            purchaseData.transaction_id = paymentIntent.id;
+            fbq('track', 'Purchase', purchaseData, { eventID: purchaseEventId });
+            console.log('Meta Pixel [Purchase] eventID:', purchaseEventId);
+          }
+
+          // Yandex Metrica: payment completed + ecommerce purchase
+          ymGoal('payment_completed', {
+            order_price: ymTotal,
+            currency: 'TRY',
+            payment_id: paymentIntent.id
+          });
+          dataLayer.push({
+            ecommerce: {
+              currencyCode: 'TRY',
+              purchase: {
+                actionField: {
+                  id: orderData.shopifyOrderName || paymentIntent.id,
+                  revenue: ymTotal,
+                  coupon: appliedCoupon || ''
+                },
+                products: ymProducts()
+              }
+            }
+          });
+
           // Yandex Metrica: order completed
           ymGoal('order_completed', {
             order_id: orderData.shopifyOrderName || '',
-            order_price: (subtotal - discountAmount) / 100,
+            order_price: ymTotal,
             currency: 'TRY'
           });
 

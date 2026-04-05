@@ -10,6 +10,19 @@ const { shopifyRequest } = require('./shopify-auth');
 
 const ALLOWED_ORIGIN = process.env.CHECKOUT_ORIGIN || 'https://checkout.thesveltechic.com';
 
+function sanitizePhoneForShopify(phone) {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+  let normalized = '';
+  if (digits.startsWith('90') && digits.length === 12) normalized = digits;
+  else if (digits.startsWith('0') && digits.length === 11) normalized = '9' + digits;
+  else if (digits.length === 10 && digits.startsWith('5')) normalized = '90' + digits;
+  if (normalized.length === 12 && normalized.startsWith('905')) {
+    return '+' + normalized;
+  }
+  return '';
+}
+
 function corsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin': origin === ALLOWED_ORIGIN ? origin : '',
@@ -49,6 +62,8 @@ exports.handler = async (event) => {
       };
     }
 
+    const safePhone = sanitizePhoneForShopify(customer.phone);
+
     // ---- Build line items for DraftOrder ----
     const lineItems = items.map(item => ({
       variant_id: item.variant_id,
@@ -83,7 +98,7 @@ exports.handler = async (event) => {
           first_name: customer.firstName,
           last_name: customer.lastName,
           email: customer.email,
-          phone: customer.phone || ''
+          ...(safePhone ? { phone: safePhone } : {})
         },
         shipping_address: {
           first_name: customer.firstName,
@@ -94,7 +109,7 @@ exports.handler = async (event) => {
           province: customer.city || '',
           zip: customer.zip || '',
           country: 'TR',
-          phone: customer.phone || ''
+          ...(safePhone ? { phone: safePhone } : {})
         },
         billing_address: {
           first_name: customer.firstName,
@@ -105,7 +120,7 @@ exports.handler = async (event) => {
           province: customer.city || '',
           zip: customer.zip || '',
           country: 'TR',
-          phone: customer.phone || ''
+          ...(safePhone ? { phone: safePhone } : {})
         },
         note: note,
         tags: 'abandoned-checkout, custom-checkout',

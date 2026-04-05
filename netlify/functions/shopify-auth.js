@@ -77,7 +77,7 @@ function fetchWithTimeout(url, opts, timeoutMs = 8000) {
  * Retries only on 429 (rate limit) — max 2 retries, short backoff.
  * Every other error fails fast so the caller can handle it.
  */
-async function shopifyRequest(endpoint, method = 'GET', data = null, retries = 2) {
+async function shopifyRequest(endpoint, method = 'GET', data = null, retries = 2, idempotencyKey = null) {
   const token = await getShopifyToken();
   const API_VERSION = '2026-04';
 
@@ -88,6 +88,9 @@ async function shopifyRequest(endpoint, method = 'GET', data = null, retries = 2
       'Content-Type': 'application/json'
     }
   };
+  if (idempotencyKey) {
+    opts.headers['Idempotency-Key'] = idempotencyKey;
+  }
   if (data) opts.body = JSON.stringify(data);
 
   const url = `https://${SHOPIFY_STORE_DOMAIN}/admin/api/${API_VERSION}/${endpoint}`;

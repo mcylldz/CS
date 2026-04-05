@@ -141,6 +141,19 @@ exports.handler = async (event) => {
       // Create PaymentIntent
       // setup_future_usage: 'off_session' saves the payment method
       // to the customer for future charges (subscriptions, manual orders)
+      // Store cart data in metadata for webhook recovery (Stripe limit: 500 chars/value)
+      const cartCompact = JSON.stringify(
+        items.map(i => ({ v: i.variant_id, q: i.quantity, p: Math.round(parseFloat(i.price || i.line_price / i.quantity)), t: (i.title || '').substring(0, 60) }))
+      ).substring(0, 500);
+
+      const shippingCompact = JSON.stringify({
+        first_name: customer.firstName, last_name: customer.lastName,
+        address1: ((customer.mahalle ? customer.mahalle + ', ' : '') + (customer.address || '')).substring(0, 120),
+        address2: (customer.district || '').substring(0, 60),
+        city: customer.city || '', province: customer.city || '',
+        zip: customer.zip || '', country: 'TR'
+      }).substring(0, 500);
+
       const paymentIntent = await stripe.paymentIntents.create({
         amount: Math.round(amount),
         currency: currency || 'try',
@@ -150,7 +163,10 @@ exports.handler = async (event) => {
         metadata: {
           customer_email: customer.email,
           customer_name: `${customer.firstName} ${customer.lastName}`,
-          items_summary: items.map(i => `${i.sku || 'N/A'} x${i.quantity}`).join(', ').substring(0, 500)
+          customer_phone: customer.phone || '',
+          items_summary: items.map(i => `${i.sku || 'N/A'} x${i.quantity}`).join(', ').substring(0, 500),
+          cart_items: cartCompact,
+          shipping_address: shippingCompact
         },
         automatic_payment_methods: {
           enabled: true,

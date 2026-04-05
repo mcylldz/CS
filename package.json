@@ -4,7 +4,10 @@
   "description": "Svelte Chic custom checkout with Stripe + Shopify + Meta CAPI",
   "private": true,
   "dependencies": {
-    "stripe": "^14.0.0",
-    "node-fetch": "^2.7.0"
+    "node-fetch": "^2.7.0",
+    "stripe": "^14.0.0"
+  },
+  "devDependencies": {
+    "terser": "^5.46.1"
   }
 }

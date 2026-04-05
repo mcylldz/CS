@@ -53,6 +53,25 @@ function normalizePhone(phone) {
   return digits;
 }
 
+/**
+ * Sanitize phone for Shopify API — returns E.164 format (+905XXXXXXXXX)
+ * or empty string if the number can't be normalized to a valid Turkish mobile.
+ * Shopify 2026-04 rejects invalid phone strings with 422.
+ */
+function sanitizePhoneForShopify(phone) {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+  let normalized = '';
+  if (digits.startsWith('90') && digits.length === 12) normalized = digits;
+  else if (digits.startsWith('0') && digits.length === 11) normalized = '9' + digits;
+  else if (digits.length === 10 && digits.startsWith('5')) normalized = '90' + digits;
+  // Validate: must be 905XXXXXXXXX (12 digits, starts with 905)
+  if (normalized.length === 12 && normalized.startsWith('905')) {
+    return '+' + normalized;
+  }
+  return ''; // invalid — omit rather than crash the order
+}
+
 // ---- Fire-and-forget: only for non-Shopify tasks (Stripe metadata, Meta CAPI) ----
 function fireAndForget(label, fn) {
   try { fn().catch(err => console.warn(`[fire-and-forget] ${label}:`, err.message)); }
@@ -89,6 +108,9 @@ exports.handler = async (event) => {
     } = body;
 
     const agreementHtml = sanitizeHtml(rawAgreementHtml);
+
+    // Sanitize phone — Shopify 2026-04 rejects invalid phone with 422
+    const safePhone = sanitizePhoneForShopify(customer.phone);
 
     // =============================================
     // STEP 0: Verify Stripe PaymentIntent
@@ -141,35 +163,44 @@ exports.handler = async (event) => {
       if (searchResp.customers && searchResp.customers.length > 0) {
         shopifyCustomerId = searchResp.customers[0].id;
         try {
-          await shopifyRequest(`customers/${shopifyCustomerId}.json`, 'PUT', {
+          const customerUpdate = {
             customer: {
               id: shopifyCustomerId,
-              phone: customer.phone,
               addresses: [{
                 first_name: customer.firstName, last_name: customer.lastName,
                 address1: (customer.mahalle ? customer.mahalle + ', ' : '') + customer.address,
                 address2: customer.district || '', city: customer.city, province: customer.city,
-                zip: customer.zip, country: 'TR', phone: customer.phone, default: true
+                zip: customer.zip, country: 'TR', default: true
               }]
             }
-          });
+          };
+          if (safePhone) {
+            customerUpdate.customer.phone = safePhone;
+            customerUpdate.customer.addresses[0].phone = safePhone;
+          }
+          await shopifyRequest(`customers/${shopifyCustomerId}.json`, 'PUT', customerUpdate);
         } catch (updateErr) {
           console.warn('Customer update warning:', updateErr.message);
         }
       } else {
-        const createResp = await shopifyRequest('customers.json', 'POST', {
+        const newCustomer = {
           customer: {
             first_name: customer.firstName, last_name: customer.lastName,
-            email: customer.email, phone: customer.phone, verified_email: true,
+            email: customer.email, verified_email: true,
             addresses: [{
               first_name: customer.firstName, last_name: customer.lastName,
               address1: (customer.mahalle ? customer.mahalle + ', ' : '') + customer.address,
               address2: customer.district || '', city: customer.city, province: customer.city,
-              zip: customer.zip, country: 'TR', phone: customer.phone, default: true
+              zip: customer.zip, country: 'TR', default: true
             }],
             tags: marketingConsent ? 'custom-checkout, accepts-marketing' : 'custom-checkout'
           }
-        });
+        };
+        if (safePhone) {
+          newCustomer.customer.phone = safePhone;
+          newCustomer.customer.addresses[0].phone = safePhone;
+        }
+        const createResp = await shopifyRequest('customers.json', 'POST', newCustomer);
         shopifyCustomerId = createResp.customer.id;
       }
     } catch (customerErr) {
@@ -218,13 +249,12 @@ exports.handler = async (event) => {
     const orderPayload = {
       order: {
         email: customer.email,
-        phone: customer.phone,
         line_items: lineItems,
         financial_status: 'paid',
         fulfillment_status: null,
         send_receipt: true,
         send_fulfillment_receipt: true,
-        note: `Custom checkout | Stripe PI: ${paymentIntentId}\n\n--- MESAFELİ SATIŞ SÖZLEŞMESİ ---\nSözleşme elektronik ortamda onaylanmıştır.`,
+        note: `Custom checkout | Stripe PI: ${paymentIntentId}${customer.phone ? '\nTelefon (orijinal): ' + customer.phone : ''}\n\n--- MESAFELİ SATIŞ SÖZLEŞMESİ ---\nSözleşme elektronik ortamda onaylanmıştır.`,
         note_attributes: noteAttributes,
         metafields: orderMetafields,
         tags: `custom-checkout, stripe, pi_${paymentIntentId.replace('pi_', '')}`,
@@ -232,13 +262,13 @@ exports.handler = async (event) => {
           first_name: customer.firstName, last_name: customer.lastName,
           address1: (customer.mahalle ? customer.mahalle + ', ' : '') + customer.address,
           address2: customer.district || '', city: customer.city, province: customer.city,
-          zip: customer.zip, country: 'TR', phone: customer.phone
+          zip: customer.zip, country: 'TR'
         },
         billing_address: {
           first_name: customer.firstName, last_name: customer.lastName,
           address1: (customer.mahalle ? customer.mahalle + ', ' : '') + customer.address,
           address2: customer.district || '', city: customer.city, province: customer.city,
-          zip: customer.zip, country: 'TR', phone: customer.phone
+          zip: customer.zip, country: 'TR'
         },
         shipping_lines: [{ title: 'Standart Kargo', price: '0.00', code: 'FREE_SHIPPING' }],
         transactions: [{
@@ -247,6 +277,13 @@ exports.handler = async (event) => {
         }]
       }
     };
+
+    // Only include phone if it's a valid E.164 Turkish number
+    if (safePhone) {
+      orderPayload.order.phone = safePhone;
+      orderPayload.order.shipping_address.phone = safePhone;
+      orderPayload.order.billing_address.phone = safePhone;
+    }
 
     if (shopifyCustomerId) {
       orderPayload.order.customer = { id: shopifyCustomerId };
@@ -303,7 +340,8 @@ exports.handler = async (event) => {
     }
 
     // ---- CREATE ORDER — single atomic call with ALL Shopify-visible data ----
-    const orderResp = await shopifyRequest('orders.json', 'POST', orderPayload);
+    // Use PI ID as idempotency key to prevent duplicate orders from retries/webhook race
+    const orderResp = await shopifyRequest('orders.json', 'POST', orderPayload, 2, `order_${paymentIntentId}`);
     const shopifyOrder = orderResp.order;
     console.log(`Shopify order created: ${shopifyOrder.name} (ID: ${shopifyOrder.id})`);
 
