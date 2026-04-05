@@ -100,6 +100,8 @@ exports.handler = async (event) => {
       subtotal,
       discountAmount,
       couponCode,
+      autoDiscountAmount,
+      autoDiscountTitle,
       total,
       fbp, fbc, purchaseEventId,
       utm_source, utm_medium, utm_campaign, utm_term, utm_content,
@@ -289,16 +291,27 @@ exports.handler = async (event) => {
       orderPayload.order.customer = { id: shopifyCustomerId };
     }
 
+    // ---- Automatic discount (Shopify cart-level discount) ----
+    if (autoDiscountAmount > 0) {
+      orderPayload.order.discount_codes = orderPayload.order.discount_codes || [];
+      orderPayload.order.discount_codes.push({
+        code: autoDiscountTitle || 'Otomatik İndirim',
+        amount: (autoDiscountAmount / 100).toFixed(2),
+        type: 'fixed_amount'
+      });
+    }
+
     // ---- Coupon: always include in order payload first (client value) ----
     // Then try server validation to upgrade it. If validation fails/times out,
     // order still has the discount the customer actually paid.
     if (discountAmount > 0 && couponCode) {
       // Fallback: use client-sent discount (already validated at payment time by create-payment)
-      orderPayload.order.discount_codes = [{
+      orderPayload.order.discount_codes = orderPayload.order.discount_codes || [];
+      orderPayload.order.discount_codes.push({
         code: couponCode,
         amount: (discountAmount / 100).toFixed(2),
         type: 'fixed_amount'
-      }];
+      });
 
       // Try server re-validation to get exact Shopify-side amount
       try {
@@ -324,12 +337,13 @@ exports.handler = async (event) => {
                 serverDiscount = Math.round(Math.abs(ruleValue) * 100);
               }
               if (serverDiscount > clientSubtotal) serverDiscount = clientSubtotal;
-              // Upgrade to server-validated amount
-              orderPayload.order.discount_codes = [{
-                code: couponCode,
-                amount: (serverDiscount / 100).toFixed(2),
-                type: 'fixed_amount'
-              }];
+              // Upgrade: replace coupon entry with server-validated amount
+              var codes = orderPayload.order.discount_codes || [];
+              var couponIdx = codes.findIndex(c => c.code === couponCode);
+              if (couponIdx >= 0) {
+                codes[couponIdx].amount = (serverDiscount / 100).toFixed(2);
+              }
+              orderPayload.order.discount_codes = codes;
             }
           }
         }

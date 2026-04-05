@@ -10,6 +10,8 @@
   let subtotal = 0;       // in kuruş (Shopify cents)
   let discountAmount = 0;  // in kuruş
   let appliedCoupon = null;
+  let autoDiscountAmount = 0;  // Shopify automatic discount (kuruş)
+  let autoDiscountTitle = '';  // e.g. "7000TL üzeri %10 indirim"
   let stripeInstance = null;
   let cardNumberElement = null;
   let cardExpiryElement = null;
@@ -113,7 +115,7 @@
         }
       });
       ymGoal('checkout_started', {
-        order_price: (subtotal - discountAmount) / 100,
+        order_price: (subtotal - discountAmount - autoDiscountAmount) / 100,
         currency: 'TRY',
         num_items: cartItems.reduce(function(s, i) { return s + i.quantity; }, 0)
       });
@@ -121,19 +123,36 @@
   }
 
   // ---- Parse Cart from URL ----
+  function parseCartData(data) {
+    // Support both formats:
+    // Old: array of items (backward compat)
+    // New: { items: [...], auto_discount: N, auto_discount_title: "..." }
+    if (Array.isArray(data)) {
+      cartItems = data;
+    } else if (data && Array.isArray(data.items) && data.items.length > 0) {
+      cartItems = data.items;
+      if (data.auto_discount > 0) {
+        autoDiscountAmount = data.auto_discount;
+        autoDiscountTitle = data.auto_discount_title || 'Otomatik İndirim';
+      }
+    }
+    if (cartItems.length > 0) {
+      // Use line_price (which now contains final_line_price from redirect)
+      subtotal = cartItems.reduce((sum, item) => sum + item.line_price, 0);
+      return true;
+    }
+    return false;
+  }
+
   function parseCart() {
     const cartParam = params.get('cart');
     if (!cartParam) {
-      // Try sessionStorage fallback (e.g. page refresh in Instagram WebView)
+      // Try sessionStorage fallback (e.g. page refresh, Instagram WebView, large cart)
       try {
         var saved = sessionStorage.getItem('sc_cart');
         if (saved) {
           var data = JSON.parse(saved);
-          if (Array.isArray(data) && data.length > 0) {
-            cartItems = data;
-            subtotal = cartItems.reduce((sum, item) => sum + item.line_price, 0);
-            return;
-          }
+          if (parseCartData(data)) return;
         }
       } catch(e) {}
       showGlobalError('Sepet bilgisi bulunamadı. Lütfen mağazaya geri dönün.');
@@ -143,9 +162,7 @@
       const decoded = decodeURIComponent(cartParam);
       const json = decodeURIComponent(escape(atob(decoded)));
       const data = JSON.parse(json);
-      if (Array.isArray(data) && data.length > 0) {
-        cartItems = data;
-        subtotal = cartItems.reduce((sum, item) => sum + item.line_price, 0);
+      if (parseCartData(data)) {
         // Save to sessionStorage for page refresh resilience
         try { sessionStorage.setItem('sc_cart', JSON.stringify(data)); } catch(e) {}
       } else {
@@ -188,12 +205,36 @@
 
   // ---- Update Totals ----
   function updateTotals() {
-    const total = subtotal - discountAmount;
+    const total = subtotal - discountAmount - autoDiscountAmount;
     document.getElementById('subtotalPrice').textContent = formatMoney(subtotal);
     document.getElementById('totalPrice').textContent = formatMoney(total);
     document.getElementById('togglePrice').textContent = formatMoney(total);
 
-    const discountLine = document.getElementById('discountLine');
+    // Shopify automatic discount line
+    var autoDiscountLine = document.getElementById('autoDiscountLine');
+    if (!autoDiscountLine && autoDiscountAmount > 0) {
+      // Create auto discount line dynamically (insert before coupon line)
+      var discountLine = document.getElementById('discountLine');
+      if (discountLine) {
+        autoDiscountLine = document.createElement('div');
+        autoDiscountLine.id = 'autoDiscountLine';
+        autoDiscountLine.className = discountLine.className;
+        autoDiscountLine.innerHTML = '<span id="autoDiscountLabel"></span><span id="autoDiscountValue"></span>';
+        discountLine.parentNode.insertBefore(autoDiscountLine, discountLine);
+      }
+    }
+    if (autoDiscountLine) {
+      if (autoDiscountAmount > 0) {
+        autoDiscountLine.style.display = 'flex';
+        document.getElementById('autoDiscountLabel').textContent = autoDiscountTitle || 'Otomatik İndirim';
+        document.getElementById('autoDiscountValue').textContent = '-' + formatMoney(autoDiscountAmount);
+      } else {
+        autoDiscountLine.style.display = 'none';
+      }
+    }
+
+    // Coupon discount line
+    var discountLine = document.getElementById('discountLine');
     if (discountAmount > 0 && appliedCoupon) {
       discountLine.style.display = 'flex';
       document.getElementById('discountLabel').textContent = `İndirim (${appliedCoupon})`;
@@ -485,7 +526,7 @@
 
   // Build fbq custom_data for events
   function buildFbqCustomData() {
-    var total = subtotal - discountAmount;
+    var total = subtotal - discountAmount - autoDiscountAmount;
     var data = {
       currency: 'TRY',
       value: parseFloat((total / 100).toFixed(2)),
@@ -534,7 +575,7 @@
       }),
       subtotal: subtotal,
       discountAmount: discountAmount,
-      total: subtotal - discountAmount,
+      total: subtotal - discountAmount - autoDiscountAmount,
       fbp: fbp,
       fbc: fbc,
       utm_source: utmSource,
@@ -610,7 +651,7 @@
 
     // Yandex Metrica: payment step reached
     ymGoal('payment_step_reached', {
-      order_price: (subtotal - discountAmount) / 100,
+      order_price: (subtotal - discountAmount - autoDiscountAmount) / 100,
       currency: 'TRY',
       customer_city: customer.city
     });
@@ -1016,7 +1057,7 @@
 
     try {
       // Step 1: Create PaymentIntent
-      const total = subtotal - discountAmount;
+      const total = subtotal - discountAmount - autoDiscountAmount;
       const piResp = await fetch('/api/create-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1087,7 +1128,9 @@
           subtotal: subtotal,
           discountAmount: discountAmount,
           couponCode: appliedCoupon,
-          total: subtotal - discountAmount,
+          autoDiscountAmount: autoDiscountAmount,
+          autoDiscountTitle: autoDiscountTitle,
+          total: subtotal - discountAmount - autoDiscountAmount,
           fbp: fbp,
           fbc: fbc,
           purchaseEventId: purchaseEventId,
@@ -1134,7 +1177,7 @@
         // Step 4: Check result before redirecting
         if (orderData && (orderData.success || orderData.shopifyOrderName)) {
           // Fire conversion events ONLY after confirmed Shopify order
-          var ymTotal = (subtotal - discountAmount) / 100;
+          var ymTotal = (subtotal - discountAmount - autoDiscountAmount) / 100;
 
           // Meta Pixel Purchase (browser-side, CAPI fires from complete-order)
           if (metaPixelReady && typeof fbq !== 'undefined') {
@@ -1174,7 +1217,7 @@
           var successParams = new URLSearchParams({
             order: orderData.shopifyOrderName || '',
             email: customerInfo.email,
-            total: formatMoney(subtotal - discountAmount)
+            total: formatMoney(subtotal - discountAmount - autoDiscountAmount)
           });
           window.location.href = '/success.html?' + successParams.toString();
         } else {
@@ -1278,7 +1321,7 @@
       return '<tr><td>' + escapeHtml(item.title) + '</td><td>' + (item.variant_title || '-') + '</td><td>' + item.quantity + '</td><td>' + formatMoney(item.line_price) + '</td></tr>';
     }).join('');
 
-    var total = subtotal - discountAmount;
+    var total = subtotal - discountAmount - autoDiscountAmount;
 
     return '<h3 style="text-align:center;margin-bottom:4px;">MESAFELİ SATIŞ SÖZLEŞMESİ</h3>' +
       '<p style="text-align:center;font-size:11px;color:#888;margin-bottom:16px;">Son G\u00fcncelleme Tarihi: 27 Mart 2026</p>' +
