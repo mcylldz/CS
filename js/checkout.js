@@ -1112,11 +1112,19 @@
         clearAbandonTimer();
         abandonSent = true;
 
-        // Generate purchaseEventId early (needed in complete-order body for CAPI dedup)
+        // Generate purchaseEventId early (needed in complete-order body + browser pixel for CAPI dedup)
         var purchaseEventId = 'purchase_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
 
-        // NOTE: Meta Pixel Purchase + Yandex purchase events are fired AFTER
-        // Shopify order is confirmed — prevents phantom conversions on failed orders.
+        // FIRE BROWSER PIXEL IMMEDIATELY after Stripe success — before complete-order.
+        // Reason: complete-order takes 3-4s. If user closes page during that wait,
+        // browser pixel never fires, CAPI has no browser match → dedup fails → Meta ignores event.
+        // Stripe payment is already confirmed at this point, so this is a real purchase.
+        if (metaPixelReady && typeof fbq !== 'undefined') {
+          var purchaseData = buildFbqCustomData();
+          purchaseData.transaction_id = paymentIntent.id;
+          fbq('track', 'Purchase', purchaseData, { eventID: purchaseEventId });
+          console.log('Meta Pixel [Purchase] fired early, eventID:', purchaseEventId);
+        }
 
         // Step 3: Complete order (Shopify + Meta CAPI) — with retry
         var orderData = null;
@@ -1179,13 +1187,8 @@
           // Fire conversion events ONLY after confirmed Shopify order
           var ymTotal = (subtotal - discountAmount - autoDiscountAmount) / 100;
 
-          // Meta Pixel Purchase (browser-side, CAPI fires from complete-order)
-          if (metaPixelReady && typeof fbq !== 'undefined') {
-            var purchaseData = buildFbqCustomData();
-            purchaseData.transaction_id = paymentIntent.id;
-            fbq('track', 'Purchase', purchaseData, { eventID: purchaseEventId });
-            console.log('Meta Pixel [Purchase] eventID:', purchaseEventId);
-          }
+          // Meta Pixel Purchase — already fired early (before complete-order) to survive page close.
+          // No duplicate here — same eventID ensures Meta deduplicates if both arrive.
 
           // Yandex Metrica: payment completed + ecommerce purchase
           ymGoal('payment_completed', {
