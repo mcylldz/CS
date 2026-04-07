@@ -409,13 +409,13 @@ exports.handler = async (event) => {
       );
     }
 
-    // Meta CAPI Purchase event
+    // Meta CAPI Purchase event — MUST await before response (Netlify kills function after return)
     if (META_PIXEL_ID && META_ACCESS_TOKEN) {
-      fireAndForget('meta-capi', () => {
+      try {
         const eventTime = Math.floor(Date.now() / 1000);
         const eventId = purchaseEventId || `purchase_${shopifyOrder.id}_${eventTime}`;
-        return fetch(
-          `https://graph.facebook.com/v25.0/${META_PIXEL_ID}/events?access_token=${META_ACCESS_TOKEN}`,
+        const capiResp = await fetch(
+          `https://graph.facebook.com/v22.0/${META_PIXEL_ID}/events?access_token=${META_ACCESS_TOKEN}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -458,8 +458,12 @@ exports.handler = async (event) => {
               }]
             })
           }
-        ).then(r => r.json()).then(d => console.log('Meta CAPI:', JSON.stringify(d)));
-      });
+        );
+        const capiResult = await capiResp.json();
+        console.log('Meta CAPI:', JSON.stringify(capiResult));
+      } catch (capiErr) {
+        console.error('Meta CAPI error:', capiErr.message);
+      }
     }
 
     // =============================================
