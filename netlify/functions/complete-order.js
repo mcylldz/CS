@@ -39,9 +39,20 @@ function corsHeaders(origin) {
   };
 }
 
+function normalizeTurkish(str) {
+  if (!str) return '';
+  return str
+    .replace(/İ/g, 'i').replace(/I/g, 'i')
+    .replace(/Ş/g, 's').replace(/ş/g, 's')
+    .replace(/Ç/g, 'c').replace(/ç/g, 'c')
+    .replace(/Ü/g, 'u').replace(/ü/g, 'u')
+    .replace(/Ö/g, 'o').replace(/ö/g, 'o')
+    .replace(/Ğ/g, 'g').replace(/ğ/g, 'g');
+}
+
 function sha256(value) {
   if (!value) return '';
-  return crypto.createHash('sha256').update(value.trim().toLowerCase()).digest('hex');
+  return crypto.createHash('sha256').update(normalizeTurkish(value).trim().toLowerCase()).digest('hex');
 }
 
 function normalizePhone(phone) {
@@ -415,7 +426,7 @@ exports.handler = async (event) => {
         const eventTime = Math.floor(Date.now() / 1000);
         const eventId = purchaseEventId || `purchase_${shopifyOrder.id}_${eventTime}`;
         const capiResp = await fetch(
-          `https://graph.facebook.com/v22.0/${META_PIXEL_ID}/events?access_token=${META_ACCESS_TOKEN}`,
+          `https://graph.facebook.com/v25.0/${META_PIXEL_ID}/events?access_token=${META_ACCESS_TOKEN}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -427,19 +438,19 @@ exports.handler = async (event) => {
                 event_source_url: sourceUrl || 'https://checkout.thesveltechic.com',
                 action_source: 'website',
                 user_data: {
-                  em: [sha256(customer.email)],
-                  ph: customer.phone ? [sha256(normalizePhone(customer.phone))] : [],
-                  fn: [sha256(customer.firstName)],
-                  ln: [sha256(customer.lastName)],
-                  ct: [sha256(customer.city)],
-                  zp: [sha256(customer.zip)],
-                  country: [sha256('tr')],
-                  st: [sha256(customer.district)],
                   client_ip_address: clientIp,
                   client_user_agent: clientUserAgent,
-                  external_id: [sha256(customer.email)],
                   ...(fbp ? { fbp } : {}),
-                  ...(fbc ? { fbc } : {})
+                  ...(fbc ? { fbc } : {}),
+                  ...(customer.email ? { em: [sha256(customer.email)] } : {}),
+                  ...(customer.phone ? { ph: [sha256(normalizePhone(customer.phone))] } : {}),
+                  ...(customer.firstName ? { fn: [sha256(customer.firstName)] } : {}),
+                  ...(customer.lastName ? { ln: [sha256(customer.lastName)] } : {}),
+                  ...(customer.city ? { ct: [sha256(customer.city)] } : {}),
+                  ...(customer.zip ? { zp: [sha256(customer.zip)] } : {}),
+                  ...(customer.district ? { st: [sha256(customer.district)] } : {}),
+                  country: [sha256('tr')],
+                  ...(shopifyCustomerId ? { external_id: [sha256(shopifyCustomerId.toString())] } : customer.email ? { external_id: [sha256(customer.email)] } : {})
                 },
                 custom_data: {
                   currency: 'TRY',

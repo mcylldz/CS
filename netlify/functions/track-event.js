@@ -22,9 +22,20 @@ function corsHeaders(origin) {
   };
 }
 
+function normalizeTurkish(str) {
+  if (!str) return '';
+  return str
+    .replace(/İ/g, 'i').replace(/I/g, 'i')
+    .replace(/Ş/g, 's').replace(/ş/g, 's')
+    .replace(/Ç/g, 'c').replace(/ç/g, 'c')
+    .replace(/Ü/g, 'u').replace(/ü/g, 'u')
+    .replace(/Ö/g, 'o').replace(/ö/g, 'o')
+    .replace(/Ğ/g, 'g').replace(/ğ/g, 'g');
+}
+
 function sha256(value) {
   if (!value) return '';
-  return crypto.createHash('sha256').update(value.trim().toLowerCase()).digest('hex');
+  return crypto.createHash('sha256').update(normalizeTurkish(value).trim().toLowerCase()).digest('hex');
 }
 
 function normalizePhone(phone) {
@@ -100,7 +111,7 @@ exports.handler = async (event) => {
       if (customer.city) userData.ct = [sha256(customer.city)];
       if (customer.zip) userData.zp = [sha256(customer.zip)];
       if (customer.district) userData.st = [sha256(customer.district)];
-      if (customer.country) userData.country = [sha256(customer.country)];
+      userData.country = [sha256('tr')];
     }
 
     // Build custom_data
