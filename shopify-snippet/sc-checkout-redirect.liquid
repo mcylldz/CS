@@ -13,10 +13,31 @@
 
   var CHECKOUT_URL = 'https://checkout.thesveltechic.com';
 
+  // ---- A/B Test: Custom vs Shopify Native Checkout ----
+  // Split: 50% custom, 50% native. Cookie ensures same user always gets same variant.
+  var AB_TEST_ENABLED = true;  // false to disable and send everyone to custom
+  var CUSTOM_CHECKOUT_RATIO = 0.5;  // 0.5 = 50% custom, 50% native
+
   // ---- Cookie helper ----
   function getCookie(name) {
     var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
     return match ? decodeURIComponent(match[2]) : '';
+  }
+
+  function setCookie(name, value, days) {
+    var d = new Date();
+    d.setTime(d.getTime() + (days * 24 * 60 * 60 * 1000));
+    document.cookie = name + '=' + value + ';expires=' + d.toUTCString() + ';path=/;SameSite=Lax';
+  }
+
+  // Determine checkout variant (sticky per user via cookie)
+  function getCheckoutVariant() {
+    if (!AB_TEST_ENABLED) return 'custom';
+    var saved = getCookie('sc_checkout_ab');
+    if (saved === 'custom' || saved === 'native') return saved;
+    var variant = Math.random() < CUSTOM_CHECKOUT_RATIO ? 'custom' : 'native';
+    setCookie('sc_checkout_ab', variant, 30);
+    return variant;
   }
 
   // ---- Get UTM params from URL or sessionStorage ----
@@ -43,9 +64,19 @@
   // Store UTMs on page load (so they persist from landing page to cart)
   getUTMs();
 
-  // ---- Redirect to custom checkout ----
+  // ---- Redirect to checkout (custom or native based on A/B) ----
   function redirectToCheckout() {
-    // Fetch full cart data from Shopify AJAX API
+    var variant = getCheckoutVariant();
+
+    // Native Shopify checkout — just let the form submit normally
+    if (variant === 'native') {
+      console.log('[SC A/B] → Shopify native checkout');
+      window.location.href = '/checkout';
+      return;
+    }
+
+    // Custom checkout — fetch cart and redirect
+    console.log('[SC A/B] → Custom checkout');
     fetch('/cart.js')
       .then(function(r) { return r.json(); })
       .then(function(cart) {
