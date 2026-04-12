@@ -519,9 +519,9 @@
     console.log('Meta Pixel Advanced Matching updated with customer data');
   }
 
-  // Build catalog-compatible content_id: shopify_TR_{product_id}_{variant_id}
+  // Build catalog-compatible content_id: variant_id (matches Meta catalog İçerik Kodu)
   function getCatalogId(item) {
-    return 'shopify_TR_' + item.product_id + '_' + item.variant_id;
+    return String(item.variant_id);
   }
 
   // Build fbq custom_data for events

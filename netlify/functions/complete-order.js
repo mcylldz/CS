@@ -457,11 +457,11 @@ exports.handler = async (event) => {
                   value: parseFloat((verifiedTotal / 100).toFixed(2)),
                   content_type: 'product',
                   contents: items.map(item => ({
-                    id: `shopify_TR_${item.product_id}_${item.variant_id}`,
+                    id: String(item.variant_id),
                     quantity: item.quantity,
                     item_price: parseFloat((item.price / 100).toFixed(2))
                   })),
-                  content_ids: items.map(item => `shopify_TR_${item.product_id}_${item.variant_id}`),
+                  content_ids: items.map(item => String(item.variant_id)),
                   num_items: items.reduce((sum, item) => sum + item.quantity, 0),
                   order_id: shopifyOrder.name,
                   transaction_id: paymentIntentId
