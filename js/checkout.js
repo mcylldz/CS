@@ -26,14 +26,18 @@
   // ---- URL Params ----
   const params = new URLSearchParams(window.location.search);
 
-  // Read fbp/fbc from cookies first, fallback to URL params
+  // Read fbp/fbc from cookies → URL params → sessionStorage (fallback for ITP/STP browsers)
   function getCookie(name) {
     var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
     return match ? decodeURIComponent(match[2]) : '';
   }
-  const fbp = getCookie('_fbp') || params.get('fbp') || '';
-  var fbclid = params.get('fbclid') || '';
-  const fbc = getCookie('_fbc') || params.get('fbc') || (fbclid ? ('fb.1.' + Date.now() + '.' + fbclid) : '');
+  function getSessionStorageItem(key) {
+    try { return sessionStorage.getItem(key) || ''; } catch(e) { return ''; }
+  }
+
+  const fbp = getCookie('_fbp') || params.get('fbp') || getSessionStorageItem('sc_fbp') || '';
+  var fbclid = params.get('fbclid') || getSessionStorageItem('sc_fbclid') || '';
+  const fbc = getCookie('_fbc') || params.get('fbc') || getSessionStorageItem('sc_fbc') || (fbclid ? ('fb.1.' + Date.now() + '.' + fbclid) : '');
 
   // Store fbp/fbc for pixel re-use across page lifecycle
   if (fbp) { try { document.cookie = '_fbp=' + fbp + '; path=/; max-age=7776000; SameSite=Lax'; } catch(e) {} }
@@ -604,7 +608,10 @@
         return {
           id: getCatalogId(item),
           quantity: item.quantity,
-          item_price: parseFloat((item.price / 100).toFixed(2))
+          item_price: parseFloat((item.price / 100).toFixed(2)),
+          title: item.title || '',  // ← Product title (for DPA, retargeting)
+          image_url: item.image || '',  // ← Product image
+          url: 'https://www.thesveltechic.com/products/' + (item.product_id || '')  // ← Product URL
         };
       });
       data.content_ids = cartItems.map(function(item) {
@@ -658,6 +665,7 @@
     var cityEl = document.getElementById('city');
     var districtEl = document.getElementById('district');
     var mahalleEl = document.getElementById('mahalle');
+    var cityValue = (cityEl && cityEl.selectedOptions[0] ? cityEl.selectedOptions[0].text : '') || '';
     return {
       email: val('email'),
       phone: val('phone'),
@@ -666,7 +674,8 @@
       address: val('address'),
       mahalle: (mahalleEl && mahalleEl.selectedOptions[0] ? mahalleEl.selectedOptions[0].text : '') || '',
       district: (districtEl && districtEl.selectedOptions[0] ? districtEl.selectedOptions[0].text : '') || '',
-      city: (cityEl && cityEl.selectedOptions[0] ? cityEl.selectedOptions[0].text : '') || '',
+      city: cityValue,
+      state: cityValue,  // ← Türkiye'de state = il (Meta EMQ için)
       zip: val('zip'),
       country: val('country') || 'TR'
     };

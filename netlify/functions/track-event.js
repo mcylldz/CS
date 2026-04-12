@@ -92,7 +92,7 @@ exports.handler = async (event) => {
     const eventTime = Math.floor(Date.now() / 1000);
     const finalEventId = eventId || `${eventName.toLowerCase()}_${eventTime}_${Math.random().toString(36).substr(2, 9)}`;
 
-    // Build user_data
+    // Build user_data (EMQ — Email Matching Quality)
     const userData = {
       client_ip_address: clientIp,
       client_user_agent: clientUserAgent,
@@ -109,8 +109,8 @@ exports.handler = async (event) => {
       if (customer.firstName) userData.fn = [sha256(customer.firstName)];
       if (customer.lastName) userData.ln = [sha256(customer.lastName)];
       if (customer.city) userData.ct = [sha256(customer.city)];
+      if (customer.state) userData.st = [sha256(customer.state)];  // ← STATE (İl/Province), not district
       if (customer.zip) userData.zp = [sha256(customer.zip)];
-      if (customer.district) userData.st = [sha256(customer.district)];
       userData.country = [sha256('tr')];
     }
 
@@ -125,7 +125,10 @@ exports.handler = async (event) => {
       customData.contents = items.map(item => ({
         id: String(item.variant_id),
         quantity: item.quantity,
-        item_price: parseFloat((item.price / 100).toFixed(2))
+        item_price: parseFloat((item.price / 100).toFixed(2)),
+        title: item.title || '',  // ← Product title (for DPA, retargeting)
+        image_url: item.image || '',  // ← Product image (for dynamic ads)
+        url: `https://www.thesveltechic.com/products/${item.product_id}`  // ← Product URL
       }));
       customData.content_ids = items.map(item => String(item.variant_id));
       customData.num_items = items.reduce((sum, item) => sum + item.quantity, 0);

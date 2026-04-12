@@ -40,20 +40,20 @@
     return variant;
   }
 
-  // ---- Get UTM params from URL or sessionStorage ----
+  // ---- Get UTM params + Meta cookies from URL or sessionStorage ----
   function getUTMs() {
     var params = new URLSearchParams(window.location.search);
-    var keys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+    var keys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'gbraid', 'wbraid', 'fbp', 'fbc'];
     var utms = {};
 
     keys.forEach(function(key) {
       var val = params.get(key);
       if (val) {
         utms[key] = val;
-        // Store in sessionStorage for persistence across pages
+        // Store in sessionStorage for persistence across pages (backup for ITP/STP browsers)
         try { sessionStorage.setItem('sc_' + key, val); } catch(e) {}
       } else {
-        // Try sessionStorage fallback
+        // Try sessionStorage fallback (useful for Safari ITP, Android WebView)
         try { utms[key] = sessionStorage.getItem('sc_' + key) || ''; } catch(e) { utms[key] = ''; }
       }
     });

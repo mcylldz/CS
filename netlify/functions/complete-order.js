@@ -450,8 +450,8 @@ exports.handler = async (event) => {
                   ...(customer.firstName ? { fn: [sha256(customer.firstName)] } : {}),
                   ...(customer.lastName ? { ln: [sha256(customer.lastName)] } : {}),
                   ...(customer.city ? { ct: [sha256(customer.city)] } : {}),
+                  ...(customer.state ? { st: [sha256(customer.state)] } : {}),  // ← STATE (İl), not district
                   ...(customer.zip ? { zp: [sha256(customer.zip)] } : {}),
-                  ...(customer.district ? { st: [sha256(customer.district)] } : {}),
                   country: [sha256('tr')],
                   ...(shopifyCustomerId ? { external_id: [sha256(shopifyCustomerId.toString())] } : customer.email ? { external_id: [sha256(customer.email)] } : {})
                 },
@@ -462,7 +462,10 @@ exports.handler = async (event) => {
                   contents: items.map(item => ({
                     id: String(item.variant_id),
                     quantity: item.quantity,
-                    item_price: parseFloat((item.price / 100).toFixed(2))
+                    item_price: parseFloat((item.price / 100).toFixed(2)),
+                    title: item.title || '',  // ← Product title (for dynamic ads)
+                    image_url: item.image || '',  // ← Product image
+                    url: `https://www.thesveltechic.com/products/${item.product_id}`  // ← Product URL
                   })),
                   content_ids: items.map(item => String(item.variant_id)),
                   num_items: items.reduce((sum, item) => sum + item.quantity, 0),
