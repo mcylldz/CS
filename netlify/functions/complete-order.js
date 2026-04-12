@@ -424,7 +424,10 @@ exports.handler = async (event) => {
     if (META_PIXEL_ID && META_ACCESS_TOKEN) {
       try {
         const eventTime = Math.floor(Date.now() / 1000);
-        const eventId = purchaseEventId || `purchase_${shopifyOrder.id}_${eventTime}`;
+        const eventId = purchaseEventId;
+        if (!purchaseEventId) {
+          console.warn('⚠️ Missing purchaseEventId from browser - browser pixel may have failed to fire');
+        }
         const capiResp = await fetch(
           `https://graph.facebook.com/v25.0/${META_PIXEL_ID}/events?access_token=${META_ACCESS_TOKEN}`,
           {

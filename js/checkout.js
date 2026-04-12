@@ -1190,7 +1190,9 @@
         abandonSent = true;
 
         // Generate purchaseEventId early (needed in complete-order body + browser pixel for CAPI dedup)
-        var purchaseEventId = 'purchase_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+        // Use seconds (not milliseconds) to match server-side format and ensure consistent dedup
+        var eventTimestamp = Math.floor(Date.now() / 1000);
+        var purchaseEventId = 'purchase_' + eventTimestamp + '_' + Math.random().toString(36).substr(2, 9);
 
         // GA4: purchase event — fire immediately (same reasoning as Meta pixel below)
         var ga4TransactionId = paymentIntent.id;
@@ -1218,11 +1220,23 @@
         // Reason: complete-order takes 3-4s. If user closes page during that wait,
         // browser pixel never fires, CAPI has no browser match → dedup fails → Meta ignores event.
         // Stripe payment is already confirmed at this point, so this is a real purchase.
+
+        // Wait up to 500ms for pixel to be ready (handles slow network/mobile)
+        var pixelWaitStart = Date.now();
+        while (!metaPixelReady && typeof fbq === 'undefined' && (Date.now() - pixelWaitStart) < 500) {
+          await new Promise(r => setTimeout(r, 50));
+        }
+
         if (metaPixelReady && typeof fbq !== 'undefined') {
+          // Refresh Advanced Matching with final complete customer data before Purchase event
+          updatePixelUserData(customerInfo);
+
           var purchaseData = buildFbqCustomData();
           purchaseData.transaction_id = paymentIntent.id;
           fbq('track', 'Purchase', purchaseData, { eventID: purchaseEventId });
-          console.log('Meta Pixel [Purchase] fired early, eventID:', purchaseEventId);
+          console.log('✅ Meta Pixel [Purchase] fired successfully, eventID:', purchaseEventId);
+        } else {
+          console.warn('⚠️ Meta Pixel not ready or fbq unavailable - CAPI fallback will handle Purchase event');
         }
 
         // Step 3: Complete order (Shopify + Meta CAPI) — with retry
