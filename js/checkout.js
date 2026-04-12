@@ -149,6 +149,20 @@
     // Meta CAPI: InitiateCheckout on page load
     fireInitiateCheckout();
 
+    // Load Meta Pixel early — independent of Stripe init (was 7-10s, now 3s or first interaction)
+    if (window.metaPixelId) {
+      var pixelTriggered = false;
+      function triggerPixelEarly() {
+        if (pixelTriggered) return;
+        pixelTriggered = true;
+        loadMetaPixel(window.metaPixelId);
+      }
+      ['click', 'scroll', 'touchstart', 'keydown', 'mousemove'].forEach(function(evt) {
+        document.addEventListener(evt, triggerPixelEarly, { once: true, passive: true });
+      });
+      setTimeout(triggerPixelEarly, 3000);
+    }
+
     // Defer Stripe.js: load on first user interaction (reduces TBT significantly)
     // PSI doesn't interact → Stripe won't load during measurement window
     // Real users interact within seconds → Stripe loads immediately
@@ -346,9 +360,10 @@
     .then(function(results) {
       var data = results[0];
 
-      // Load Meta Pixel if pixel ID is available
-      if (data.metaPixelId) {
-        loadMetaPixel(data.metaPixelId);
+      // Load Meta Pixel if pixel ID is available (fallback to window.metaPixelId if API omits it)
+      var pixelId = data.metaPixelId || window.metaPixelId || '';
+      if (pixelId) {
+        loadMetaPixel(pixelId);
       }
 
       if (data.publishableKey) {

@@ -453,7 +453,7 @@ exports.handler = async (event) => {
                   ...(customer.state ? { st: [customer.state] } : {}),  // ← PLAINTEXT (STATE field)
                   ...(customer.zip ? { zp: [customer.zip] } : {}),  // ← PLAINTEXT
                   country: ['TR'],  // ← PLAINTEXT
-                  ...(shopifyCustomerId ? { external_id: [shopifyCustomerId.toString()] } : customer.email ? { external_id: [customer.email] } : {})  // ← PLAINTEXT
+                  ...(customer.email ? { external_id: [customer.email] } : {})  // ← PLAINTEXT — consistent with track-event.js (email-based)
                 },
                 custom_data: {
                   currency: 'TRY',
@@ -478,6 +478,15 @@ exports.handler = async (event) => {
         );
         const capiResult = await capiResp.json();
         console.log('Meta CAPI:', JSON.stringify(capiResult));
+        if (!capiResp.ok) {
+          console.error('Meta CAPI HTTP error:', capiResp.status, JSON.stringify(capiResult));
+        }
+        if (capiResult.error) {
+          console.error('Meta CAPI Purchase ERROR:', JSON.stringify(capiResult.error));
+        }
+        if (capiResult.events_received === 0) {
+          console.error('Meta CAPI Purchase: 0 events received — event was dropped!');
+        }
       } catch (capiErr) {
         console.error('Meta CAPI error:', capiErr.message);
       }
