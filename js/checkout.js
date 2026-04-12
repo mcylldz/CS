@@ -44,6 +44,14 @@
   const utmTerm = params.get('utm_term') || '';
   const utmContent = params.get('utm_content') || '';
 
+  // Google Ads click IDs — capture from URL or sessionStorage
+  const gclid = params.get('gclid') || (function() { try { return sessionStorage.getItem('sc_gclid') || ''; } catch(e) { return ''; } })();
+  const gbraid = params.get('gbraid') || (function() { try { return sessionStorage.getItem('sc_gbraid') || ''; } catch(e) { return ''; } })();
+  const wbraid = params.get('wbraid') || (function() { try { return sessionStorage.getItem('sc_wbraid') || ''; } catch(e) { return ''; } })();
+  if (gclid) { try { sessionStorage.setItem('sc_gclid', gclid); } catch(e) {} }
+  if (gbraid) { try { sessionStorage.setItem('sc_gbraid', gbraid); } catch(e) {} }
+  if (wbraid) { try { sessionStorage.setItem('sc_wbraid', wbraid); } catch(e) {} }
+
   // ---- Init ----
   document.addEventListener('DOMContentLoaded', init);
 
@@ -55,6 +63,47 @@
     if (digits.startsWith('0') && digits.length === 11) return '9' + digits;
     if (digits.length === 10 && digits.startsWith('5')) return '90' + digits;
     return digits;
+  }
+
+  // ---- GA4 Helpers ----
+  var GA4_ID = 'G-J8YYTV1W2E';
+  var GA4_AW_ID = 'AW-11536130276';
+
+  // Get GA4 client_id from _ga cookie (format: GA1.1.XXXXXXXXXX.YYYYYYYYYY)
+  function getGA4ClientId() {
+    try {
+      var match = document.cookie.match(/(?:^|;\s*)_ga=GA\d+\.\d+\.(.+?)(?:;|$)/);
+      if (match) return match[1];
+    } catch(e) {}
+    return '';
+  }
+
+  // Get GA4 session_id from _ga_<container> cookie
+  function getGA4SessionId() {
+    try {
+      var match = document.cookie.match(/(?:^|;\s*)_ga_J8YYTV1W2E=GS\d+\.\d+\.(.+?)(?:\.|;|$)/);
+      if (match) return match[1];
+    } catch(e) {}
+    return '';
+  }
+
+  // Build GA4 ecommerce items array from cart
+  function buildGA4Items() {
+    return cartItems.map(function(item, idx) {
+      return {
+        item_id: item.sku || String(item.variant_id),
+        item_name: item.title,
+        item_variant: item.variant_title || '',
+        item_brand: 'Svelte Chic',
+        price: item.price / 100,
+        quantity: item.quantity,
+        index: idx
+      };
+    });
+  }
+
+  function getGA4Value() {
+    return parseFloat(((subtotal - discountAmount - autoDiscountAmount) / 100).toFixed(2));
   }
 
   // ---- Yandex Metrica Helpers ----
@@ -81,6 +130,13 @@
   }
 
   function init() {
+    // Meta Pixel initialization check
+    if (!window.metaPixelId) {
+      console.warn('⚠️ Meta Pixel ID not set. Pixel tracking disabled.');
+    } else {
+      console.log('✅ Meta Pixel ID found:', window.metaPixelId);
+    }
+
     parseCart();
     renderItems();
     updateTotals();
@@ -103,6 +159,16 @@
     });
     // Fallback: load after 10s if no interaction (keeps it outside PSI core window)
     setTimeout(triggerStripe, 10000);
+
+    // GA4: begin_checkout event
+    if (cartItems.length > 0 && typeof gtag === 'function') {
+      gtag('event', 'begin_checkout', {
+        currency: 'TRY',
+        value: getGA4Value(),
+        coupon: appliedCoupon || '',
+        items: buildGA4Items()
+      });
+    }
 
     // Yandex Metrica: product detail view + checkout_started goal
     if (cartItems.length > 0) {
@@ -762,6 +828,17 @@
 
     goToStep(2);
 
+    // GA4: add_payment_info event
+    if (typeof gtag === 'function') {
+      gtag('event', 'add_payment_info', {
+        currency: 'TRY',
+        value: getGA4Value(),
+        payment_type: 'Credit Card',
+        coupon: appliedCoupon || '',
+        items: buildGA4Items()
+      });
+    }
+
     // Meta CAPI: AddPaymentInfo when entering payment step
     fireAddPaymentInfo();
 
@@ -1115,6 +1192,28 @@
         // Generate purchaseEventId early (needed in complete-order body + browser pixel for CAPI dedup)
         var purchaseEventId = 'purchase_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
 
+        // GA4: purchase event — fire immediately (same reasoning as Meta pixel below)
+        var ga4TransactionId = paymentIntent.id;
+        if (typeof gtag === 'function') {
+          gtag('event', 'purchase', {
+            transaction_id: ga4TransactionId,
+            value: getGA4Value(),
+            currency: 'TRY',
+            shipping: 0,
+            tax: 0,
+            coupon: appliedCoupon || '',
+            items: buildGA4Items()
+          });
+          // Google Ads conversion
+          gtag('event', 'conversion', {
+            send_to: GA4_AW_ID + '/purchase',
+            value: getGA4Value(),
+            currency: 'TRY',
+            transaction_id: ga4TransactionId
+          });
+          console.log('GA4 [purchase] + Google Ads [conversion] fired, txn:', ga4TransactionId);
+        }
+
         // FIRE BROWSER PIXEL IMMEDIATELY after Stripe success — before complete-order.
         // Reason: complete-order takes 3-4s. If user closes page during that wait,
         // browser pixel never fires, CAPI has no browser match → dedup fails → Meta ignores event.
@@ -1142,6 +1241,11 @@
           fbp: fbp,
           fbc: fbc,
           purchaseEventId: purchaseEventId,
+          ga_client_id: getGA4ClientId(),
+          ga_session_id: getGA4SessionId(),
+          gclid: gclid,
+          gbraid: gbraid,
+          wbraid: wbraid,
           utm_source: utmSource,
           utm_medium: utmMedium,
           utm_campaign: utmCampaign,
@@ -1220,8 +1324,12 @@
           var successParams = new URLSearchParams({
             order: orderData.shopifyOrderName || '',
             email: customerInfo.email,
-            total: formatMoney(subtotal - discountAmount - autoDiscountAmount)
+            total: formatMoney(subtotal - discountAmount - autoDiscountAmount),
+            txn: ga4TransactionId,
+            value: getGA4Value().toString(),
+            items: cartItems.length.toString()
           });
+          if (gclid) successParams.set('gclid', gclid);
           window.location.href = '/success.html?' + successParams.toString();
         } else {
           // Payment taken but Shopify order failed after all retries.

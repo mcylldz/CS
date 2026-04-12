@@ -7,6 +7,25 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="/css/checkout.css">
+
+  <!-- GA4 gtag.js -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8YYTV1W2E"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-J8YYTV1W2E', {
+      cookie_domain: '.thesveltechic.com',
+      cookie_flags: 'SameSite=None;Secure',
+      linker: { domains: ['thesveltechic.com', 'checkout.thesveltechic.com'], accept_incoming: true }
+    });
+    gtag('config', 'AW-11536130276', { allow_enhanced_conversions: true });
+  </script>
+
+  <!-- Meta Pixel ID -->
+  <script>
+    window.metaPixelId = '436434139143285';
+  </script>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"></noscript>
   <style>
@@ -165,6 +184,26 @@
         var agreementUrl = '/api/get-agreement?order=' + encodeURIComponent(orderName) + '&email=' + encodeURIComponent(email);
         document.getElementById('agreementLink').href = agreementUrl;
         document.getElementById('agreementLinkWrap').style.display = 'block';
+      }
+
+      // GA4: purchase event (backup — deduplicates with checkout.js via same transaction_id)
+      var txnId = p.get('txn') || '';
+      var orderValue = parseFloat(p.get('value') || '0');
+      if (txnId && orderValue > 0 && typeof gtag === 'function') {
+        gtag('event', 'purchase', {
+          transaction_id: txnId,
+          value: orderValue,
+          currency: 'TRY',
+          shipping: 0,
+          tax: 0
+        });
+        // Google Ads conversion (backup)
+        gtag('event', 'conversion', {
+          send_to: 'AW-11536130276/purchase',
+          value: orderValue,
+          currency: 'TRY',
+          transaction_id: txnId
+        });
       }
 
       // Yandex Metrica: order success page goal

@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Ödeme – Svelte Chic</title>
   <meta name="description" content="Svelte Chic güvenli ödeme sayfası. Kredi kartı ile hızlı ve güvenli alışveriş yapın. Ücretsiz kargo, kolay iade.">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23b5a07c'/%3E%3Ctext x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' font-family='serif' font-weight='700' font-size='20' fill='white'%3ES%3C/text%3E%3C/svg%3E">
@@ -13,6 +13,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://js.stripe.com">
   <link rel="preconnect" href="https://api.stripe.com">
+  <link rel="preconnect" href="https://connect.facebook.net" crossorigin>
+  <link rel="prefetch" href="https://connect.facebook.net/en_US/fbevents.js">
 
   <!-- Critical CSS first -->
   <link rel="stylesheet" href="/css/checkout.css">
@@ -22,6 +24,26 @@
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"></noscript>
 
   <!-- Stripe.js loaded lazily via checkout.js (was render-blocking 132KB) -->
+
+  <!-- GA4 gtag.js — async, non-blocking -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8YYTV1W2E"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-J8YYTV1W2E', {
+      cookie_domain: '.thesveltechic.com',
+      cookie_flags: 'SameSite=None;Secure',
+      linker: { domains: ['thesveltechic.com', 'checkout.thesveltechic.com'], accept_incoming: true }
+    });
+    // Google Ads remarketing config
+    gtag('config', 'AW-11536130276', { allow_enhanced_conversions: true });
+  </script>
+
+  <!-- Meta Pixel ID -->
+  <script>
+    window.metaPixelId = '436434139143285';
+  </script>
 </head>
 <body>
   <!-- Header -->

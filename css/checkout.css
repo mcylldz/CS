@@ -733,9 +733,10 @@ body {
   margin-bottom: 10px;
 }
 .sc-checkbox {
-  width: 18px;
-  height: 18px;
-  margin-top: 2px;
+  width: 24px;
+  height: 24px;
+  margin-top: 0;
+  margin-right: 8px;
   flex-shrink: 0;
   accent-color: #b5a07c;
   cursor: pointer;
