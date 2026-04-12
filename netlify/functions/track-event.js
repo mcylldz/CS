@@ -102,16 +102,16 @@ exports.handler = async (event) => {
 
     if (customer) {
       if (customer.email) {
-        userData.em = [sha256(customer.email)];
-        userData.external_id = [sha256(customer.email)];
+        userData.em = [customer.email];  // ← PLAINTEXT (Meta will hash)
+        userData.external_id = [customer.email];  // ← PLAINTEXT
       }
-      if (customer.phone) userData.ph = [sha256(normalizePhone(customer.phone))];
-      if (customer.firstName) userData.fn = [sha256(customer.firstName)];
-      if (customer.lastName) userData.ln = [sha256(customer.lastName)];
-      if (customer.city) userData.ct = [sha256(customer.city)];
-      if (customer.state) userData.st = [sha256(customer.state)];  // ← STATE (İl/Province), not district
-      if (customer.zip) userData.zp = [sha256(customer.zip)];
-      userData.country = [sha256('tr')];
+      if (customer.phone) userData.ph = [normalizePhone(customer.phone)];  // ← PLAINTEXT
+      if (customer.firstName) userData.fn = [customer.firstName];  // ← PLAINTEXT
+      if (customer.lastName) userData.ln = [customer.lastName];  // ← PLAINTEXT
+      if (customer.city) userData.ct = [customer.city];  // ← PLAINTEXT
+      if (customer.state) userData.st = [customer.state];  // ← PLAINTEXT (STATE in plaintext)
+      if (customer.zip) userData.zp = [customer.zip];  // ← PLAINTEXT
+      userData.country = ['TR'];  // ← PLAINTEXT
     }
 
     // Build custom_data

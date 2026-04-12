@@ -445,15 +445,15 @@ exports.handler = async (event) => {
                   client_user_agent: clientUserAgent,
                   ...(fbp ? { fbp } : {}),
                   ...(fbc ? { fbc } : {}),
-                  ...(customer.email ? { em: [sha256(customer.email)] } : {}),
-                  ...(customer.phone ? { ph: [sha256(normalizePhone(customer.phone))] } : {}),
-                  ...(customer.firstName ? { fn: [sha256(customer.firstName)] } : {}),
-                  ...(customer.lastName ? { ln: [sha256(customer.lastName)] } : {}),
-                  ...(customer.city ? { ct: [sha256(customer.city)] } : {}),
-                  ...(customer.state ? { st: [sha256(customer.state)] } : {}),  // ← STATE (İl), not district
-                  ...(customer.zip ? { zp: [sha256(customer.zip)] } : {}),
-                  country: [sha256('tr')],
-                  ...(shopifyCustomerId ? { external_id: [sha256(shopifyCustomerId.toString())] } : customer.email ? { external_id: [sha256(customer.email)] } : {})
+                  ...(customer.email ? { em: [customer.email] } : {}),  // ← PLAINTEXT (Meta will hash)
+                  ...(customer.phone ? { ph: [normalizePhone(customer.phone)] } : {}),  // ← PLAINTEXT
+                  ...(customer.firstName ? { fn: [customer.firstName] } : {}),  // ← PLAINTEXT
+                  ...(customer.lastName ? { ln: [customer.lastName] } : {}),  // ← PLAINTEXT
+                  ...(customer.city ? { ct: [customer.city] } : {}),  // ← PLAINTEXT
+                  ...(customer.state ? { st: [customer.state] } : {}),  // ← PLAINTEXT (STATE field)
+                  ...(customer.zip ? { zp: [customer.zip] } : {}),  // ← PLAINTEXT
+                  country: ['TR'],  // ← PLAINTEXT
+                  ...(shopifyCustomerId ? { external_id: [shopifyCustomerId.toString()] } : customer.email ? { external_id: [customer.email] } : {})  // ← PLAINTEXT
                 },
                 custom_data: {
                   currency: 'TRY',
