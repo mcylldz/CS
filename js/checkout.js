@@ -676,8 +676,9 @@
   function fireMetaEvent(eventName, customer) {
     var payload = getTrackingBase();
     payload.eventName = eventName;
-    // Generate shared eventId for deduplication
-    var eventId = eventName.toLowerCase() + '_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+    // Generate shared eventId for deduplication — use seconds format to match server-side
+    var eventTimestamp = Math.floor(Date.now() / 1000);
+    var eventId = eventName.toLowerCase() + '_' + eventTimestamp + '_' + Math.random().toString(36).substr(2, 9);
     payload.eventId = eventId;
     if (customer) payload.customer = customer;
 
@@ -702,8 +703,10 @@
   }
 
   // Fire InitiateCheckout on page load (after cart parse)
+  // Note: Pixel may not be ready yet (lazy loaded), so deferred firing is handled in loadMetaPixel()
   function fireInitiateCheckout() {
     if (cartItems.length === 0) return;
+    // InitiateCheckout can be deferred (see line 688-689) or fired immediately if pixel ready
     fireMetaEvent('InitiateCheckout', null);
   }
 
@@ -713,7 +716,13 @@
     var customer = getCustomerData();
     // Update pixel with customer data for better Advanced Matching on this and future events
     updatePixelUserData(customer);
-    fireMetaEvent('AddPaymentInfo', customer);
+    // Wait for pixel to be ready before firing event (up to 300ms)
+    if (metaPixelReady || typeof fbq !== 'undefined') {
+      fireMetaEvent('AddPaymentInfo', customer);
+    } else {
+      console.warn('⚠️ Meta Pixel not ready yet when entering payment step - using CAPI only');
+      fireMetaEvent('AddPaymentInfo', customer); // CAPI will still fire
+    }
 
     // Yandex Metrica: payment step reached
     ymGoal('payment_step_reached', {
