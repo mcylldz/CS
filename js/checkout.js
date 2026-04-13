@@ -52,6 +52,8 @@
   const gclid = params.get('gclid') || (function() { try { return sessionStorage.getItem('sc_gclid') || ''; } catch(e) { return ''; } })();
   const gbraid = params.get('gbraid') || (function() { try { return sessionStorage.getItem('sc_gbraid') || ''; } catch(e) { return ''; } })();
   const wbraid = params.get('wbraid') || (function() { try { return sessionStorage.getItem('sc_wbraid') || ''; } catch(e) { return ''; } })();
+  if (fbp) { try { sessionStorage.setItem('sc_fbp', fbp); } catch(e) {} }
+  if (fbc) { try { sessionStorage.setItem('sc_fbc', fbc); } catch(e) {} }
   if (fbclid) { try { sessionStorage.setItem('sc_fbclid', fbclid); } catch(e) {} }
   if (gclid) { try { sessionStorage.setItem('sc_gclid', gclid); } catch(e) {} }
   if (gbraid) { try { sessionStorage.setItem('sc_gbraid', gbraid); } catch(e) {} }
