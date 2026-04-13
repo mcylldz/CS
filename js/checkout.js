@@ -627,9 +627,9 @@
     console.log('Meta Pixel Advanced Matching updated with customer data');
   }
 
-  // Build catalog-compatible content_id: variant_id (matches Meta catalog İçerik Kodu)
+  // Build catalog-compatible content_id: product_id (matches Shopify Sales Channel format)
   function getCatalogId(item) {
-    return String(item.variant_id);
+    return String(item.product_id);
   }
 
   // Build fbq custom_data for events
@@ -638,7 +638,7 @@
     var data = {
       currency: 'TRY',
       value: parseFloat((total / 100).toFixed(2)),
-      content_type: 'product',
+      content_type: 'product_group',
       num_items: cartItems.reduce(function(sum, item) { return sum + item.quantity; }, 0)
     };
     if (cartItems.length > 0) {

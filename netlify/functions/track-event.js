@@ -121,13 +121,13 @@ exports.handler = async (event) => {
     };
 
     if (items && items.length > 0) {
-      customData.content_type = 'product';
+      customData.content_type = 'product_group';
       customData.contents = items.map(item => ({
-        id: String(item.variant_id),
+        id: String(item.product_id),
         quantity: item.quantity,
         item_price: parseFloat((item.price / 100).toFixed(2))
       }));
-      customData.content_ids = items.map(item => String(item.variant_id));
+      customData.content_ids = items.map(item => String(item.product_id));
       customData.num_items = items.reduce((sum, item) => sum + item.quantity, 0);
     }
 
