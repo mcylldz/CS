@@ -102,16 +102,16 @@ exports.handler = async (event) => {
 
     if (customer) {
       if (customer.email) {
-        userData.em = [customer.email];  // ← PLAINTEXT (Meta will hash)
-        userData.external_id = [customer.email];  // ← PLAINTEXT
+        userData.em = [customer.email.trim().toLowerCase()];
+        userData.external_id = [customer.email.trim().toLowerCase()];
       }
-      if (customer.phone) userData.ph = [normalizePhone(customer.phone)];  // ← PLAINTEXT
-      if (customer.firstName) userData.fn = [customer.firstName];  // ← PLAINTEXT
-      if (customer.lastName) userData.ln = [customer.lastName];  // ← PLAINTEXT
-      if (customer.city) userData.ct = [customer.city];  // ← PLAINTEXT
-      if (customer.state) userData.st = [customer.state];  // ← PLAINTEXT (STATE in plaintext)
-      if (customer.zip) userData.zp = [customer.zip];  // ← PLAINTEXT
-      userData.country = ['TR'];  // ← PLAINTEXT
+      if (customer.phone) userData.ph = [normalizePhone(customer.phone)];
+      if (customer.firstName) userData.fn = [customer.firstName.trim().toLowerCase()];
+      if (customer.lastName) userData.ln = [customer.lastName.trim().toLowerCase()];
+      if (customer.city) userData.ct = [customer.city.trim().toLowerCase()];
+      if (customer.state) userData.st = [customer.state.trim().toLowerCase()];
+      if (customer.zip) userData.zp = [customer.zip.trim()];
+      userData.country = ['tr'];
     }
 
     // Build custom_data

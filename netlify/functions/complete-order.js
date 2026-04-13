@@ -445,15 +445,15 @@ exports.handler = async (event) => {
                   client_user_agent: clientUserAgent,
                   ...(fbp ? { fbp } : {}),
                   ...(fbc ? { fbc } : {}),
-                  ...(customer.email ? { em: [customer.email] } : {}),  // ← PLAINTEXT (Meta will hash)
-                  ...(customer.phone ? { ph: [normalizePhone(customer.phone)] } : {}),  // ← PLAINTEXT
-                  ...(customer.firstName ? { fn: [customer.firstName] } : {}),  // ← PLAINTEXT
-                  ...(customer.lastName ? { ln: [customer.lastName] } : {}),  // ← PLAINTEXT
-                  ...(customer.city ? { ct: [customer.city] } : {}),  // ← PLAINTEXT
-                  ...(customer.state ? { st: [customer.state] } : {}),  // ← PLAINTEXT (STATE field)
-                  ...(customer.zip ? { zp: [customer.zip] } : {}),  // ← PLAINTEXT
-                  country: ['TR'],  // ← PLAINTEXT
-                  ...(customer.email ? { external_id: [customer.email] } : {})  // ← PLAINTEXT — consistent with track-event.js (email-based)
+                  ...(customer.email ? { em: [customer.email.trim().toLowerCase()] } : {}),
+                  ...(customer.phone ? { ph: [normalizePhone(customer.phone)] } : {}),
+                  ...(customer.firstName ? { fn: [customer.firstName.trim().toLowerCase()] } : {}),
+                  ...(customer.lastName ? { ln: [customer.lastName.trim().toLowerCase()] } : {}),
+                  ...(customer.city ? { ct: [customer.city.trim().toLowerCase()] } : {}),
+                  ...(customer.state ? { st: [customer.state.trim().toLowerCase()] } : {}),
+                  ...(customer.zip ? { zp: [customer.zip.trim()] } : {}),
+                  country: ['tr'],
+                  ...(customer.email ? { external_id: [customer.email.trim().toLowerCase()] } : {})
                 },
                 custom_data: {
                   currency: 'TRY',

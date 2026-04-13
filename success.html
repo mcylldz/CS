@@ -226,6 +226,26 @@
     })();
   </script>
 
+  <!-- Meta Pixel: backup Purchase event (same eventID as checkout.js for deduplication) -->
+  <script>
+    !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+    n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+    n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+    t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
+    document,'script','https://connect.facebook.net/en_US/fbevents.js');
+    fbq('init', '436434139143285');
+    (function(){
+      var p = new URLSearchParams(window.location.search);
+      var eid = p.get('eid');
+      var val = parseFloat(p.get('value'));
+      if (eid && val > 0) {
+        fbq('track', 'Purchase', {
+          value: val, currency: 'TRY', content_type: 'product'
+        }, { eventID: eid });
+      }
+    })();
+  </script>
+
   <!-- Yandex.Metrika: queue setup inline, tag.js deferred 5s -->
   <script type="text/javascript">
     window.ym=window.ym||function(){(window.ym.a=window.ym.a||[]).push(arguments)};

@@ -585,6 +585,13 @@
       fireFbqEvent('InitiateCheckout', window._deferredICEventId, null);
       window._deferredICEventId = null;
     }
+
+    // Fire deferred AddPaymentInfo if user reached Step 2 before pixel loaded
+    if (window._deferredAPIEventId) {
+      fireFbqEvent('AddPaymentInfo', window._deferredAPIEventId, window._deferredAPICustomer);
+      window._deferredAPIEventId = null;
+      window._deferredAPICustomer = null;
+    }
   }
 
   // Re-init pixel with user data when they complete Step 1 (for better matching on Step 2 events)
@@ -661,7 +668,8 @@
           title: i.title,
           quantity: i.quantity,
           price: i.price,
-          line_price: i.line_price
+          line_price: i.line_price,
+          image: i.image || ''
         };
       }),
       subtotal: subtotal,
@@ -715,6 +723,10 @@
     } else if (eventName === 'InitiateCheckout') {
       // Pixel not yet loaded, defer the fbq call
       window._deferredICEventId = eventId;
+    } else if (eventName === 'AddPaymentInfo') {
+      // Pixel not yet loaded, defer AddPaymentInfo too
+      window._deferredAPIEventId = eventId;
+      window._deferredAPICustomer = customer;
     }
 
     // 2) Server-side: CAPI event (same eventId for deduplication)
@@ -1382,6 +1394,7 @@
             items: cartItems.length.toString()
           });
           if (gclid) successParams.set('gclid', gclid);
+          if (purchaseEventId) successParams.set('eid', purchaseEventId);
           window.location.href = '/success.html?' + successParams.toString();
         } else {
           // Payment taken but Shopify order failed after all retries.
