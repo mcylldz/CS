@@ -62,6 +62,17 @@
   // ---- Init ----
   document.addEventListener('DOMContentLoaded', init);
 
+  // ---- Turkish Character Normalize (İ→i, Ş→s, Ç→c, etc.) ----
+  function normalizeTurkish(str) {
+    if (!str) return '';
+    return str.replace(/İ/g, 'i').replace(/I/g, 'i')
+      .replace(/Ş/g, 's').replace(/ş/g, 's')
+      .replace(/Ç/g, 'c').replace(/ç/g, 'c')
+      .replace(/Ü/g, 'u').replace(/ü/g, 'u')
+      .replace(/Ö/g, 'o').replace(/ö/g, 'o')
+      .replace(/Ğ/g, 'g').replace(/ğ/g, 'g');
+  }
+
   // ---- Phone Normalize (Turkey: 905xxxxxxxxx) ----
   function normalizePhone(phone) {
     if (!phone) return '';
@@ -564,8 +575,8 @@
     var lnVal = val('lastName');
     if (emailVal) advancedMatchData.em = emailVal.toLowerCase().trim();
     if (phoneVal) advancedMatchData.ph = normalizePhone(phoneVal);
-    if (fnVal) advancedMatchData.fn = fnVal.toLowerCase().trim();
-    if (lnVal) advancedMatchData.ln = lnVal.toLowerCase().trim();
+    if (fnVal) advancedMatchData.fn = normalizeTurkish(fnVal).toLowerCase().trim();
+    if (lnVal) advancedMatchData.ln = normalizeTurkish(lnVal).toLowerCase().trim();
 
     window._metaPixelId = pixelId; // Store for re-init with user data later
 
@@ -602,10 +613,10 @@
     var userData = {};
     if (customer.email) userData.em = customer.email.toLowerCase().trim();
     if (customer.phone) userData.ph = normalizePhone(customer.phone);
-    if (customer.firstName) userData.fn = customer.firstName.toLowerCase().trim();
-    if (customer.lastName) userData.ln = customer.lastName.toLowerCase().trim();
-    if (customer.city) userData.ct = customer.city.toLowerCase().trim();
-    if (customer.state) userData.st = customer.state.toLowerCase().trim();
+    if (customer.firstName) userData.fn = normalizeTurkish(customer.firstName).toLowerCase().trim();
+    if (customer.lastName) userData.ln = normalizeTurkish(customer.lastName).toLowerCase().trim();
+    if (customer.city) userData.ct = normalizeTurkish(customer.city).toLowerCase().trim();
+    if (customer.state) userData.st = normalizeTurkish(customer.state).toLowerCase().trim();
     if (customer.zip) userData.zp = customer.zip.trim();
     if (customer.country) userData.country = customer.country.toLowerCase().trim();
     if (customer.email) userData.external_id = customer.email.toLowerCase().trim();
@@ -1180,6 +1191,7 @@
       mahalle: mahalleText,
       district: districtText,
       city: cityText,
+      state: cityText,  // Türkiye'de state = il (getCustomerData ile tutarlı)
       zip: val('zip'),
       country: val('country')
     };

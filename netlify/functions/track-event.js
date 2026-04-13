@@ -106,10 +106,10 @@ exports.handler = async (event) => {
         userData.external_id = [customer.email.trim().toLowerCase()];
       }
       if (customer.phone) userData.ph = [normalizePhone(customer.phone)];
-      if (customer.firstName) userData.fn = [customer.firstName.trim().toLowerCase()];
-      if (customer.lastName) userData.ln = [customer.lastName.trim().toLowerCase()];
-      if (customer.city) userData.ct = [customer.city.trim().toLowerCase()];
-      if (customer.state) userData.st = [customer.state.trim().toLowerCase()];
+      if (customer.firstName) userData.fn = [normalizeTurkish(customer.firstName).trim().toLowerCase()];
+      if (customer.lastName) userData.ln = [normalizeTurkish(customer.lastName).trim().toLowerCase()];
+      if (customer.city) userData.ct = [normalizeTurkish(customer.city).trim().toLowerCase()];
+      if (customer.state) userData.st = [normalizeTurkish(customer.state).trim().toLowerCase()];
       if (customer.zip) userData.zp = [customer.zip.trim()];
       userData.country = ['tr'];
     }
