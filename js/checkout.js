@@ -595,8 +595,10 @@
     if (customer.firstName) userData.fn = customer.firstName.toLowerCase().trim();
     if (customer.lastName) userData.ln = customer.lastName.toLowerCase().trim();
     if (customer.city) userData.ct = customer.city.toLowerCase().trim();
+    if (customer.state) userData.st = customer.state.toLowerCase().trim();
     if (customer.zip) userData.zp = customer.zip.trim();
     if (customer.country) userData.country = customer.country.toLowerCase().trim();
+    if (customer.email) userData.external_id = customer.email.toLowerCase().trim();
     if (fbp) userData.fbp = fbp;
     if (fbc) userData.fbc = fbc;
     // Use fbq('init') again with user data to update matching for subsequent events
