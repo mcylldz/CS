@@ -125,10 +125,7 @@ exports.handler = async (event) => {
       customData.contents = items.map(item => ({
         id: String(item.variant_id),
         quantity: item.quantity,
-        item_price: parseFloat((item.price / 100).toFixed(2)),
-        title: item.title || '',  // ← Product title (for DPA, retargeting)
-        image_url: item.image || '',  // ← Product image (for dynamic ads)
-        url: `https://www.thesveltechic.com/products/${item.product_id}`  // ← Product URL
+        item_price: parseFloat((item.price / 100).toFixed(2))
       }));
       customData.content_ids = items.map(item => String(item.variant_id));
       customData.num_items = items.reduce((sum, item) => sum + item.quantity, 0);
