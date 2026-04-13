@@ -52,6 +52,7 @@
   const gclid = params.get('gclid') || (function() { try { return sessionStorage.getItem('sc_gclid') || ''; } catch(e) { return ''; } })();
   const gbraid = params.get('gbraid') || (function() { try { return sessionStorage.getItem('sc_gbraid') || ''; } catch(e) { return ''; } })();
   const wbraid = params.get('wbraid') || (function() { try { return sessionStorage.getItem('sc_wbraid') || ''; } catch(e) { return ''; } })();
+  if (fbclid) { try { sessionStorage.setItem('sc_fbclid', fbclid); } catch(e) {} }
   if (gclid) { try { sessionStorage.setItem('sc_gclid', gclid); } catch(e) {} }
   if (gbraid) { try { sessionStorage.setItem('sc_gbraid', gbraid); } catch(e) {} }
   if (wbraid) { try { sessionStorage.setItem('sc_wbraid', wbraid); } catch(e) {} }
@@ -736,9 +737,11 @@
     fireMetaEvent('InitiateCheckout', null);
   }
 
-  // Fire AddPaymentInfo when user enters Step 2
+  // Fire AddPaymentInfo when user enters Step 2 (once only — prevent duplicate on step navigation)
+  var addPaymentInfoFired = false;
   function fireAddPaymentInfo() {
-    if (cartItems.length === 0) return;
+    if (addPaymentInfoFired || cartItems.length === 0) return;
+    addPaymentInfoFired = true;
     var customer = getCustomerData();
     // Update pixel with customer data for better Advanced Matching on this and future events
     updatePixelUserData(customer);

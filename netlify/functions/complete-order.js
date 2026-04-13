@@ -424,9 +424,9 @@ exports.handler = async (event) => {
     if (META_PIXEL_ID && META_ACCESS_TOKEN) {
       try {
         const eventTime = Math.floor(Date.now() / 1000);
-        const eventId = purchaseEventId;
+        const eventId = purchaseEventId || `purchase_${eventTime}_${Math.random().toString(36).substr(2, 9)}`;
         if (!purchaseEventId) {
-          console.warn('⚠️ Missing purchaseEventId from browser - browser pixel may have failed to fire');
+          console.warn('⚠️ Missing purchaseEventId from browser — generated fallback:', eventId);
         }
         const capiResp = await fetch(
           `https://graph.facebook.com/v25.0/${META_PIXEL_ID}/events?access_token=${META_ACCESS_TOKEN}`,
