@@ -102,16 +102,19 @@ exports.handler = async (event) => {
 
     if (customer) {
       if (customer.email) {
-        userData.em = [customer.email.trim().toLowerCase()];
-        userData.external_id = [customer.email.trim().toLowerCase()];
+        userData.em = [sha256(customer.email)];
+        userData.external_id = [sha256(customer.email)];
       }
-      if (customer.phone) userData.ph = [normalizePhone(customer.phone)];
-      if (customer.firstName) userData.fn = [normalizeTurkish(customer.firstName).trim().toLowerCase()];
-      if (customer.lastName) userData.ln = [normalizeTurkish(customer.lastName).trim().toLowerCase()];
-      if (customer.city) userData.ct = [normalizeTurkish(customer.city).trim().toLowerCase()];
-      if (customer.state) userData.st = [normalizeTurkish(customer.state).trim().toLowerCase()];
-      if (customer.zip) userData.zp = [customer.zip.trim()];
-      userData.country = ['tr'];
+      if (customer.phone) {
+        const normalized = normalizePhone(customer.phone);
+        if (normalized) userData.ph = [sha256(normalized)];
+      }
+      if (customer.firstName) userData.fn = [sha256(customer.firstName)];
+      if (customer.lastName) userData.ln = [sha256(customer.lastName)];
+      if (customer.city) userData.ct = [sha256(customer.city)];
+      if (customer.state) userData.st = [sha256(customer.state)];
+      if (customer.zip) userData.zp = [sha256(customer.zip)];
+      userData.country = [sha256('tr')];
     }
 
     // Build custom_data

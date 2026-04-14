@@ -445,15 +445,14 @@ exports.handler = async (event) => {
                   client_user_agent: clientUserAgent,
                   ...(fbp ? { fbp } : {}),
                   ...(fbc ? { fbc } : {}),
-                  ...(customer.email ? { em: [customer.email.trim().toLowerCase()] } : {}),
-                  ...(customer.phone ? { ph: [normalizePhone(customer.phone)] } : {}),
-                  ...(customer.firstName ? { fn: [normalizeTurkish(customer.firstName).trim().toLowerCase()] } : {}),
-                  ...(customer.lastName ? { ln: [normalizeTurkish(customer.lastName).trim().toLowerCase()] } : {}),
-                  ...(customer.city ? { ct: [normalizeTurkish(customer.city).trim().toLowerCase()] } : {}),
-                  ...(customer.state ? { st: [normalizeTurkish(customer.state).trim().toLowerCase()] } : {}),
-                  ...(customer.zip ? { zp: [customer.zip.trim()] } : {}),
-                  country: ['tr'],
-                  ...(customer.email ? { external_id: [customer.email.trim().toLowerCase()] } : {})
+                  ...(customer.email ? { em: [sha256(customer.email)], external_id: [sha256(customer.email)] } : {}),
+                  ...(customer.phone ? { ph: [sha256(normalizePhone(customer.phone))] } : {}),
+                  ...(customer.firstName ? { fn: [sha256(customer.firstName)] } : {}),
+                  ...(customer.lastName ? { ln: [sha256(customer.lastName)] } : {}),
+                  ...(customer.city ? { ct: [sha256(customer.city)] } : {}),
+                  ...(customer.state ? { st: [sha256(customer.state)] } : {}),
+                  ...(customer.zip ? { zp: [sha256(customer.zip)] } : {}),
+                  country: [sha256('tr')]
                 },
                 custom_data: {
                   currency: 'TRY',
