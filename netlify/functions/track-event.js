@@ -120,7 +120,7 @@ exports.handler = async (event) => {
     // Build custom_data
     const customData = {
       currency: 'TRY',
-      value: parseFloat(((total || subtotal || 0) / 100).toFixed(2))
+      value: parseFloat(((total != null ? total : (subtotal || 0)) / 100).toFixed(2))
     };
 
     if (items && items.length > 0) {

@@ -29,15 +29,22 @@
   // Read fbp/fbc from cookies → URL params → sessionStorage (fallback for ITP/STP browsers)
   function getCookie(name) {
     var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
-    return match ? decodeURIComponent(match[2]) : '';
+    // Do NOT decodeURIComponent — Meta pixel stores fbclid raw (URL-encoded)
+    // in _fbc cookie. Decoding modifies the fbclid (e.g. %2B → +) which
+    // causes Meta's "modified fbclid" diagnostic error and breaks attribution.
+    return match ? match[2] : '';
   }
   function getSessionStorageItem(key) {
     try { return sessionStorage.getItem(key) || ''; } catch(e) { return ''; }
   }
 
   const fbp = getCookie('_fbp') || params.get('fbp') || getSessionStorageItem('sc_fbp') || '';
-  var fbclid = params.get('fbclid') || getSessionStorageItem('sc_fbclid') || '';
-  const fbc = getCookie('_fbc') || params.get('fbc') || getSessionStorageItem('sc_fbc') || (fbclid ? ('fb.1.' + Date.now() + '.' + fbclid) : '');
+  // Extract raw (URL-encoded) fbclid to match Meta pixel behavior when constructing fbc
+  var rawFbclidMatch = window.location.search.match(/[?&]fbclid=([^&#]*)/);
+  var rawFbclid = rawFbclidMatch ? rawFbclidMatch[1] : '';
+  var fbclid = rawFbclid ? decodeURIComponent(rawFbclid) : (params.get('fbclid') || getSessionStorageItem('sc_fbclid') || '');
+  // fbc priority: cookie → URL param → sessionStorage → construct from raw fbclid
+  const fbc = getCookie('_fbc') || params.get('fbc') || getSessionStorageItem('sc_fbc') || (rawFbclid ? ('fb.1.' + Date.now() + '.' + rawFbclid) : (fbclid ? ('fb.1.' + Date.now() + '.' + fbclid) : ''));
 
   // Store fbp/fbc for pixel re-use across page lifecycle
   if (fbp) { try { document.cookie = '_fbp=' + fbp + '; path=/; max-age=7776000; SameSite=Lax'; } catch(e) {} }
@@ -646,10 +653,7 @@
         return {
           id: getCatalogId(item),
           quantity: item.quantity,
-          item_price: parseFloat((item.price / 100).toFixed(2)),
-          title: item.title || '',  // ← Product title (for DPA, retargeting)
-          image_url: item.image || '',  // ← Product image
-          url: 'https://www.thesveltechic.com/products/' + (item.product_id || '')  // ← Product URL
+          item_price: parseFloat((item.price / 100).toFixed(2))
         };
       });
       data.content_ids = cartItems.map(function(item) {
