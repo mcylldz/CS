@@ -25,7 +25,7 @@ function corsHeaders(origin) {
 function normalizeTurkish(str) {
   if (!str) return '';
   return str
-    .replace(/İ/g, 'i').replace(/I/g, 'i')
+    .replace(/İ/g, 'i').replace(/I/g, 'i').replace(/ı/g, 'i')
     .replace(/Ş/g, 's').replace(/ş/g, 's')
     .replace(/Ç/g, 'c').replace(/ç/g, 'c')
     .replace(/Ü/g, 'u').replace(/ü/g, 'u')
@@ -36,6 +36,12 @@ function normalizeTurkish(str) {
 function sha256(value) {
   if (!value) return '';
   return crypto.createHash('sha256').update(normalizeTurkish(value).trim().toLowerCase()).digest('hex');
+}
+
+// Meta CAPI spec: ct, st, zp must have spaces, dashes, punctuation removed before hashing
+function sha256Geo(value) {
+  if (!value) return '';
+  return crypto.createHash('sha256').update(normalizeTurkish(value).trim().toLowerCase().replace(/[\s\-.,;:'"()\/\\]+/g, '')).digest('hex');
 }
 
 function normalizePhone(phone) {
@@ -111,9 +117,9 @@ exports.handler = async (event) => {
       }
       if (customer.firstName) userData.fn = [sha256(customer.firstName)];
       if (customer.lastName) userData.ln = [sha256(customer.lastName)];
-      if (customer.city) userData.ct = [sha256(customer.city)];
-      if (customer.state) userData.st = [sha256(customer.state)];
-      if (customer.zip) userData.zp = [sha256(customer.zip)];
+      if (customer.city) userData.ct = [sha256Geo(customer.city)];
+      if (customer.state) userData.st = [sha256Geo(customer.state)];
+      if (customer.zip) userData.zp = [sha256Geo(customer.zip)];
       userData.country = [sha256('tr')];
     }
 

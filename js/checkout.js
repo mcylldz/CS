@@ -72,7 +72,7 @@
   // ---- Turkish Character Normalize (İ→i, Ş→s, Ç→c, etc.) ----
   function normalizeTurkish(str) {
     if (!str) return '';
-    return str.replace(/İ/g, 'i').replace(/I/g, 'i')
+    return str.replace(/İ/g, 'i').replace(/I/g, 'i').replace(/ı/g, 'i')
       .replace(/Ş/g, 's').replace(/ş/g, 's')
       .replace(/Ç/g, 'c').replace(/ç/g, 'c')
       .replace(/Ü/g, 'u').replace(/ü/g, 'u')
