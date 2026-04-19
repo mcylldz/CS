@@ -16,6 +16,12 @@ const { shopifyRequest } = require('./shopify-auth');
 
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 
+// === FEATURE FLAG: Shopify native checkout aktif ===
+// Shopify native checkout + Shopify Stripe app aynı Stripe hesabını kullanıyor.
+// Bu webhook Shopify-originated payment'lar için de tetiklenir ve duplicate order yaratır.
+// Custom checkout'a geri dönüldüğünde bu flag'i false yap.
+const DISABLE_WEBHOOK_RECOVERY = true;
+
 function sanitizePhoneForShopify(phone) {
   if (!phone) return '';
   const digits = phone.replace(/\D/g, '');
@@ -32,6 +38,12 @@ function sanitizePhoneForShopify(phone) {
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method not allowed' };
+  }
+
+  // Feature flag: Shopify native checkout aktifken webhook recovery'yi durdur
+  if (DISABLE_WEBHOOK_RECOVERY) {
+    console.log('[stripe-webhook] DISABLED (Shopify native checkout aktif) — skipping');
+    return { statusCode: 200, body: JSON.stringify({ received: true, skipped: 'native_checkout_mode' }) };
   }
 
   // Verify webhook signature
