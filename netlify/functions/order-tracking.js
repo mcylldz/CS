@@ -61,11 +61,16 @@ function calculateTimeline(createdAt, fulfillment) {
   const trackingNumber = fulfillment?.tracking_number || null;
   const trackingUrl = fulfillment?.tracking_url || null;
   const fulfillmentStatus = fulfillment?.status || null; // pending, open, success, cancelled
+  const hasTracking = !!trackingNumber && fulfillmentStatus !== 'cancelled';
 
-  // Shopify fulfillment "success" = teslim edildi
-  const isDelivered = fulfillmentStatus === 'success';
-  // Tracking number varsa "dağıtımda" aşamasına geçmiş demek
-  const isInTransit = !!trackingNumber && !isDelivered;
+  // Şimdilik "dağıtımda" ve "teslim edildi" otomatik aktifleşmiyor —
+  // tracking girildiğinde sadece "kargoya verildi" aşamasına kadar ilerlet.
+  const isInTransit = false;
+  const isDelivered = false;
+
+  const isShipped = now >= shippedDate || hasTracking;
+  const isPackaged = now >= packagingDate || isShipped;
+  const isProduced = now >= productionDate || isPackaged;
 
   const stages = [
     {
@@ -80,24 +85,24 @@ function calculateTimeline(createdAt, fulfillment) {
       key: 'production',
       label: 'Üretim Başladı',
       date: productionDate.toISOString(),
-      active: now >= productionDate,
-      completed: now >= productionDate,
+      active: isProduced,
+      completed: isProduced,
       description: 'Ürünleriniz üretim sürecine alındı.'
     },
     {
       key: 'packaging',
       label: 'Paketleme Aşamasında',
       date: packagingDate.toISOString(),
-      active: now >= packagingDate,
-      completed: now >= packagingDate,
+      active: isPackaged,
+      completed: isPackaged,
       description: 'Ürünleriniz özenle paketleniyor.'
     },
     {
       key: 'shipped',
       label: 'Kargoya Verildi',
       date: shippedDate.toISOString(),
-      active: now >= shippedDate,
-      completed: now >= shippedDate,
+      active: isShipped,
+      completed: isShipped,
       description: 'Siparişiniz başarılı bir şekilde kargoya verildi. Yerel kargo şirketine teslim edildikten sonra kargo takip numaranız e-posta adresinize iletilecek ve aynı zamanda buradan da takibini yapabileceksiniz. Yerel kargo takip numaranızın oluşması 7 ila 9 iş günü sürmektedir.'
     },
     {
